@@ -10,6 +10,7 @@ mobile/node_modules/
 mobile/.expo/
 mobile/dist/
 mobile/web-build/
+mobile/.env
 mobile/*.log
 npm-debug.*
 yarn-error.*
