@@ -6,4 +6,4 @@ python-jose[cryptography]>=3.3
 bcrypt>=4.1
 python-dotenv>=1.0
 alembic>=1.13
-pydantic[email]>=2.7
+pydantic>=2.7

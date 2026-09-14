@@ -1,18 +1,30 @@
 import datetime as dt
+import re
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_.]+$")
 
 
 # --- Auth ---
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        if not USERNAME_PATTERN.match(value):
+            raise ValueError(
+                "Username may only contain letters, numbers, underscores, and periods"
+            )
+        return value
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 
@@ -20,8 +32,13 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    email: str
+    username: str
+    rest_timer_seconds: int
     created_at: dt.datetime
+
+
+class SettingsUpdate(BaseModel):
+    rest_timer_seconds: int = Field(ge=10, le=600)
 
 
 class Token(BaseModel):
