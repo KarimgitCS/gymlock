@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -9,21 +10,25 @@ import {
 } from "react";
 
 import { api } from "../api/client";
+import type { User } from "../api/types";
 
 const TOKEN_KEY = "gymlock_token";
 
 interface AuthContextValue {
   token: string | null;
+  user: User | null;
   isLoading: boolean;
-  signup: (email: string, password: string) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  signup: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateRestTimerSeconds: (seconds: number) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -32,29 +37,54 @@ export function AuthProvider({ children }: PropsWithChildren) {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // The token is the source of truth for the session; once it's known, load
+  // the account's profile and persisted settings (e.g. rest timer duration)
+  // so they're available on every device the user logs into, not just this one.
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      return;
+    }
+    api
+      .getMe(token)
+      .then(setUser)
+      .catch(() => setUser(null));
+  }, [token]);
+
   const persistToken = async (newToken: string) => {
     await SecureStore.setItemAsync(TOKEN_KEY, newToken);
     setToken(newToken);
   };
 
+  const updateRestTimerSeconds = useCallback(
+    async (seconds: number) => {
+      if (!token) throw new Error("Not authenticated");
+      const updated = await api.updateSettings(token, seconds);
+      setUser(updated);
+    },
+    [token]
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       token,
+      user,
       isLoading,
-      signup: async (email, password) => {
-        const result = await api.signup(email, password);
+      signup: async (username, password) => {
+        const result = await api.signup(username, password);
         await persistToken(result.access_token);
       },
-      login: async (email, password) => {
-        const result = await api.login(email, password);
+      login: async (username, password) => {
+        const result = await api.login(username, password);
         await persistToken(result.access_token);
       },
       logout: async () => {
         await SecureStore.deleteItemAsync(TOKEN_KEY);
         setToken(null);
       },
+      updateRestTimerSeconds,
     }),
-    [token, isLoading]
+    [token, user, isLoading, updateRestTimerSeconds]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

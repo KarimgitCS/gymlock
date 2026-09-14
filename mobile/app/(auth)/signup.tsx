@@ -17,20 +17,28 @@ import { colors, spacing } from "../../src/theme";
 export default function SignupScreen() {
   const { signup } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
     setError(null);
+    if (username.trim().length < 3) {
+      setError("Username must be at least 3 characters");
+      return;
+    }
+    if (!/^[a-zA-Z0-9_.]+$/.test(username.trim())) {
+      setError("Username may only contain letters, numbers, underscores, and periods");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
     }
     setLoading(true);
     try {
-      await signup(email.trim(), password);
+      await signup(username.trim(), password);
       router.replace("/(tabs)");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
@@ -50,13 +58,13 @@ export default function SignupScreen() {
 
         <View style={styles.form}>
           <TextField
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
+            label="Username"
+            value={username}
+            onChangeText={setUsername}
             autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            placeholder="you@example.com"
+            autoCorrect={false}
+            autoComplete="username-new"
+            placeholder="At least 3 characters"
           />
           <TextField
             label="Password"
@@ -71,7 +79,7 @@ export default function SignupScreen() {
             title="Sign up"
             onPress={onSubmit}
             loading={loading}
-            disabled={!email || !password}
+            disabled={!username || !password}
           />
         </View>
 

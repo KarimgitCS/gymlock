@@ -17,7 +17,7 @@ import { colors, spacing } from "../../src/theme";
 export default function LoginScreen() {
   const { login } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,7 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      await login(username.trim(), password);
       router.replace("/(tabs)");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
@@ -46,13 +46,13 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           <TextField
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
+            label="Username"
+            value={username}
+            onChangeText={setUsername}
             autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            placeholder="you@example.com"
+            autoCorrect={false}
+            autoComplete="username"
+            placeholder="yourusername"
           />
           <TextField
             label="Password"
@@ -67,7 +67,7 @@ export default function LoginScreen() {
             title="Log in"
             onPress={onSubmit}
             loading={loading}
-            disabled={!email || !password}
+            disabled={!username || !password}
           />
         </View>
 

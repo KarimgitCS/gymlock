@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../config";
-import type { Exercise, Set, Token, Workout } from "./types";
+import type { Exercise, Set, Token, User, Workout } from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -50,11 +50,20 @@ async function request<T>(
 }
 
 export const api = {
-  signup: (email: string, password: string) =>
-    request<Token>("/auth/signup", { method: "POST", body: { email, password } }),
+  signup: (username: string, password: string) =>
+    request<Token>("/auth/signup", { method: "POST", body: { username, password } }),
 
-  login: (email: string, password: string) =>
-    request<Token>("/auth/login", { method: "POST", body: { email, password } }),
+  login: (username: string, password: string) =>
+    request<Token>("/auth/login", { method: "POST", body: { username, password } }),
+
+  getMe: (token: string) => request<User>("/auth/me", { token }),
+
+  updateSettings: (token: string, restTimerSeconds: number) =>
+    request<User>("/auth/me", {
+      method: "PATCH",
+      body: { rest_timer_seconds: restTimerSeconds },
+      token,
+    }),
 
   listWorkouts: (token: string) => request<Workout[]>("/workouts", { token }),
 

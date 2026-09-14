@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import type { Exercise } from "../../src/api/types";
+import { useAuth } from "../../src/auth/AuthContext";
 import { Button } from "../../src/components/Button";
 import { RestTimer } from "../../src/components/RestTimer";
 import { TextField } from "../../src/components/TextField";
@@ -90,8 +91,10 @@ function ExerciseCard({
 export default function WorkoutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const workoutId = Number(id);
+  const { user } = useAuth();
   const { getWorkout, refresh, addExercise, logSet } = useWorkouts();
   const workout = getWorkout(workoutId);
+  const restDuration = user?.rest_timer_seconds ?? 90;
 
   const [exerciseName, setExerciseName] = useState("");
   const [addingExercise, setAddingExercise] = useState(false);
@@ -163,7 +166,11 @@ export default function WorkoutDetailScreen() {
 
       {restTimerKey ? (
         <View style={styles.timerWrapper}>
-          <RestTimer key={restTimerKey} onDismiss={() => setRestTimerKey(null)} />
+          <RestTimer
+            key={restTimerKey}
+            durationSeconds={restDuration}
+            onDismiss={() => setRestTimerKey(null)}
+          />
         </View>
       ) : null}
     </KeyboardAvoidingView>
