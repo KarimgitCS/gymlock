@@ -14,10 +14,11 @@ A workout tracking mobile app — log workouts, track sets/reps/weights over tim
 
 ## MVP feature set
 
-- Email/password signup & login (JWT-based auth)
+- Username/password signup & login (JWT-based auth, no email required)
 - Log workouts made up of exercises, each with sets (weight × reps)
 - Basic progress charts (e.g. weight/volume over time per exercise)
 - Rest timer between sets — uses the set-completion timestamp plus React Native's `AppState` API (rather than just a running in-app timer), so it stays accurate even if the app is backgrounded
+- Per-account settings (e.g. default rest timer duration) persisted server-side, so they follow the user across devices/logins
 
 Explicitly out of scope for the MVP: an exercise library/database, and any ML or analytics layer.
 
@@ -112,15 +113,17 @@ Scan the QR code with your phone's camera (iOS) or the Expo Go app (Android) to 
 
 | Table    | Key fields                                                       |
 |----------|--------------------------------------------------------------------|
-| User     | id, email, hashed_password, created_at                            |
+| User     | id, username, hashed_password, rest_timer_seconds, created_at     |
 | Workout  | id, user_id (FK), date, notes                                     |
 | Exercise | id, workout_id (FK), name, order                                  |
 | Set      | id, exercise_id (FK), weight, reps, set_number, completed_at       |
 
 ## API surface (backend)
 
-- `POST /auth/signup` — create account
+- `POST /auth/signup` — create account (username + password)
 - `POST /auth/login` — returns JWT
+- `GET /auth/me` — current user's profile and settings
+- `PATCH /auth/me` — update settings (e.g. `rest_timer_seconds`)
 - `GET /workouts` — list current user's workouts
 - `POST /workouts` — create a workout
 - `POST /workouts/{id}/exercises` — add an exercise to a workout
