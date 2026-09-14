@@ -1,0 +1,22 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.routers import auth, exercises, workouts
+
+app = FastAPI(title="GymLock API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(workouts.router)
+app.include_router(exercises.router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
