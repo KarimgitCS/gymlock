@@ -140,6 +140,23 @@ All routes except signup/login require a valid JWT in the `Authorization` header
 - **Rest timer** — starts on set completion; timestamp-based so it survives the app being backgrounded, using `AppState` to reconcile elapsed time on foreground
 - **Progress screen** — charts of weight/volume per exercise over time
 
+## Deployment
+
+The backend is deployed on [Render](https://render.com) as a free-tier web service (`gymlock-api`) with a free-tier managed Postgres instance (`gymlock-db`), both in the Oregon region:
+
+- **Live API**: `https://gymlock-api.onrender.com` (interactive docs at `/docs`)
+- **Start command**: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT` — migrations run on every boot rather than as a separate pre-deploy step, since Render's pre-deploy-command and one-off-job features require a paid plan and are silently skipped on free tier
+- **Root directory**: `backend/` (Render builds from this subdirectory of the repo)
+- Auto-deploys on every push to `main`
+
+Caveats of the free tier: the Postgres database expires 30 days after creation unless upgraded, and the free web service spins down after periods of inactivity (the first request after idling will be slow while it spins back up).
+
+To point the mobile app at the deployed API instead of a local backend, set in `mobile/.env`:
+
+```
+EXPO_PUBLIC_API_URL=https://gymlock-api.onrender.com
+```
+
 ## Getting it on your iPhone
 
 **During development:** use Expo Go (see step 4 above) — free, instant, no restrictions, this is how you'll preview the app as you build it.
