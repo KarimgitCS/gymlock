@@ -1,4 +1,3 @@
-import * as SecureStore from "expo-secure-store";
 import {
   createContext,
   useCallback,
@@ -11,6 +10,7 @@ import {
 
 import { api } from "../api/client";
 import type { User } from "../api/types";
+import { tokenStorage } from "./tokenStorage";
 
 const TOKEN_KEY = "gymlock_token";
 
@@ -32,7 +32,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    SecureStore.getItemAsync(TOKEN_KEY)
+    tokenStorage
+      .get(TOKEN_KEY)
       .then(setToken)
       .finally(() => setIsLoading(false));
   }, []);
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [token]);
 
   const persistToken = async (newToken: string) => {
-    await SecureStore.setItemAsync(TOKEN_KEY, newToken);
+    await tokenStorage.set(TOKEN_KEY, newToken);
     setToken(newToken);
   };
 
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await persistToken(result.access_token);
       },
       logout: async () => {
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
+        await tokenStorage.remove(TOKEN_KEY);
         setToken(null);
       },
       updateRestTimerSeconds,
