@@ -9,12 +9,19 @@ import {
   View,
 } from "react-native";
 
-import type { Exercise } from "../../src/types";
-import { useSettings } from "../../src/settings/SettingsContext";
 import { Button } from "../../src/components/Button";
+import { NumberPicker } from "../../src/components/NumberPicker";
 import { RestTimer } from "../../src/components/RestTimer";
 import { TextField } from "../../src/components/TextField";
+import {
+  DEFAULT_REPS,
+  DEFAULT_WEIGHT,
+  REPS_OPTIONS,
+  WEIGHT_OPTIONS,
+} from "../../src/constants";
+import { useSettings } from "../../src/settings/SettingsContext";
 import { accentFor, colors, radius, spacing } from "../../src/theme";
+import type { Exercise } from "../../src/types";
 import { formatDate } from "../../src/utils/date";
 import { useWorkouts } from "../../src/workouts/WorkoutsContext";
 
@@ -25,41 +32,50 @@ function ExerciseCard({
   exercise: Exercise;
   onLogSet: (exerciseId: number, weight: number, reps: number) => Promise<void>;
 }) {
-  const [weight, setWeight] = useState("");
-  const [reps, setReps] = useState("");
+  const plan = exercise.plan ?? null;
+  const [weight, setWeight] = useState(plan?.weight ?? DEFAULT_WEIGHT);
+  const [reps, setReps] = useState(plan?.reps ?? DEFAULT_REPS);
   const [submitting, setSubmitting] = useState(false);
 
-  const weightNum = Number(weight);
-  const repsNum = Number(reps);
-  const canSubmit =
-    weight.trim() !== "" &&
-    reps.trim() !== "" &&
-    !Number.isNaN(weightNum) &&
-    !Number.isNaN(repsNum) &&
-    !submitting;
+  const accent = accentFor(exercise.name);
+  const logged = exercise.sets.length;
+  const done = plan !== null && logged >= plan.sets;
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (submitting) return;
     setSubmitting(true);
     try {
-      await onLogSet(exercise.id, weightNum, repsNum);
-      setWeight("");
-      setReps("");
+      await onLogSet(exercise.id, weight, reps);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <View style={[styles.exerciseCard, { borderLeftColor: accentFor(exercise.name) }]}>
-      <Text style={[styles.exerciseName, { color: accentFor(exercise.name) }]}>{exercise.name}</Text>
+    <View style={[styles.exerciseCard, { borderLeftColor: accent }]}>
+      <View style={styles.exerciseHeader}>
+        <Text style={[styles.exerciseName, { color: accent }]}>{exercise.name}</Text>
+        {plan ? (
+          <View style={[styles.progressChip, done && styles.progressChipDone]}>
+            <Text style={[styles.progressText, done && { color: colors.background }]}>
+              {done ? "✓ Done" : `Set ${logged + 1} of ${plan.sets}`}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {plan ? (
+        <Text style={styles.planText}>
+          Plan: {plan.sets} × {plan.reps} at {plan.weight} lb
+        </Text>
+      ) : null}
 
       {exercise.sets.length > 0 ? (
         <View style={styles.setsTable}>
           {exercise.sets.map((s) => (
             <View key={s.id} style={styles.setRow}>
               <Text style={styles.setLabel}>Set {s.set_number}</Text>
-              <Text style={[styles.setValue, { color: colors.cyan }]}>
+              <Text style={styles.setValue}>
                 {s.weight} lb × {s.reps}
               </Text>
             </View>
@@ -68,21 +84,30 @@ function ExerciseCard({
       ) : null}
 
       <View style={styles.setInputRow}>
-        <TextField
-          placeholder="Weight"
+        <NumberPicker
+          label="Weight"
           value={weight}
-          onChangeText={setWeight}
-          keyboardType="decimal-pad"
-          style={styles.setInput}
+          options={WEIGHT_OPTIONS}
+          unit="lb"
+          onChange={setWeight}
+          accent={colors.orange}
+          testID={`log-${exercise.id}-weight`}
         />
-        <TextField
-          placeholder="Reps"
+        <NumberPicker
+          label="Reps"
           value={reps}
-          onChangeText={setReps}
-          keyboardType="number-pad"
-          style={styles.setInput}
+          options={REPS_OPTIONS}
+          onChange={setReps}
+          accent={colors.cyan}
+          testID={`log-${exercise.id}-reps`}
         />
-        <Button title="Log" onPress={submit} disabled={!canSubmit} loading={submitting} />
+        <View style={styles.logButton}>
+          <Button
+            title={done ? "Log extra" : "Log set"}
+            onPress={submit}
+            loading={submitting}
+          />
+        </View>
       </View>
     </View>
   );
@@ -122,7 +147,7 @@ export default function WorkoutDetailScreen() {
         <Text style={styles.emptyText}>{isLoading ? "Loading workout…" : "Workout not found"}</Text>
         {isLoading ? null : (
           <Link href="/" style={styles.notFoundLink}>
-            ‹ Back to workouts
+            ‹ Back to home
           </Link>
         )}
       </View>
@@ -136,19 +161,21 @@ export default function WorkoutDetailScreen() {
     >
       <Stack.Screen
         options={{
-          title: formatDate(workout.date),
+          title: workout.name || formatDate(workout.date),
           // After a browser reload there is no history to go back to, so offer a link home.
           headerLeft: router.canGoBack()
             ? undefined
             : () => (
                 <Link href="/" style={styles.backLink}>
-                  ‹ Workouts
+                  ‹ Home
                 </Link>
               ),
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {workout.name ? <Text style={styles.dateLine}>{formatDate(workout.date)}</Text> : null}
+
         {workout.exercises.length === 0 ? (
           <Text style={styles.emptyText}>
             Add your first exercise below to start logging sets.
@@ -161,7 +188,7 @@ export default function WorkoutDetailScreen() {
 
         <View style={styles.addExerciseRow}>
           <TextField
-            placeholder="Exercise name (e.g. Bench Press)"
+            placeholder="Add another exercise"
             value={exerciseName}
             onChangeText={setExerciseName}
             style={styles.addExerciseInput}
@@ -209,6 +236,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
+  dateLine: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   emptyText: {
     color: colors.textMuted,
     fontSize: 14,
@@ -224,10 +256,36 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  exerciseHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
   exerciseName: {
-    color: colors.text,
     fontSize: 18,
     fontWeight: "800",
+    flexShrink: 1,
+  },
+  progressChip: {
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: colors.pink,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  progressChipDone: {
+    backgroundColor: colors.mint,
+    borderColor: colors.mint,
+  },
+  progressText: {
+    color: colors.pink,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  planText: {
+    color: colors.textMuted,
+    fontSize: 13,
   },
   setsTable: {
     gap: spacing.xs,
@@ -241,17 +299,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   setValue: {
-    color: colors.text,
+    color: colors.cyan,
     fontSize: 14,
     fontWeight: "700",
   },
   setInputRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: spacing.sm,
   },
-  setInput: {
-    flex: 1,
+  logButton: {
+    flex: 1.1,
   },
   addExerciseRow: {
     flexDirection: "row",
