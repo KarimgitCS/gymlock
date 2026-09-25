@@ -12,3 +12,5 @@ export const WEIGHT_OPTIONS = range(5, 300, WEIGHT_STEP);
 export const DEFAULT_SETS = 3;
 export const DEFAULT_REPS = 10;
 export const DEFAULT_WEIGHT = 45;
+
+export const REST_OPTIONS = range(15, 300, 15);
