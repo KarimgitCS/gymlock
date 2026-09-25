@@ -16,7 +16,8 @@ A workout tracking mobile app — log workouts, track sets/reps/weights over tim
 ## MVP feature set
 
 - No login: the app opens straight to your workouts, and everything is stored on the device (browser storage on the web, app storage on phones), so each device keeps its own data
-- Log workouts made up of exercises, each with sets (weight × reps)
+- Saved sessions (presets): tap Start workout, pick a saved session such as Push Day, and a new workout opens pre-filled with its exercises, sets, reps and weight. Create, edit and delete your own presets (three starters are included)
+- Log workouts made up of exercises, each with sets (weight × reps), chosen from scrolling dropdowns instead of typing: sets 1–8, reps 1–16, weight 5–300 lb in 5 lb steps
 - Basic progress charts (e.g. weight/volume over time per exercise)
 - Rest timer between sets — uses the set-completion timestamp plus React Native's `AppState` API (rather than just a running in-app timer), so it stays accurate even if the app is backgrounded
 - Configurable default rest timer, saved on the device
@@ -138,7 +139,8 @@ All routes except signup/login require a valid JWT in the `Authorization` header
 ## Mobile app structure
 
 - **Local storage** — workouts, exercises, sets and settings are saved on the device via AsyncStorage (`mobile/src/storage`, `WorkoutsContext`, `SettingsContext`); there is no login
-- **Workout logging screens** — start a workout, add exercises, log sets (weight/reps) against each
+- **Start / presets** — Start workout opens the saved sessions (`app/start.tsx`); presets are created and edited in `app/preset/[id].tsx` and stored on the device (`src/presets`)
+- **Workout logging screen** — each exercise shows `Set N of M` from its plan, with weight and reps dropdowns (`src/components/NumberPicker.tsx`, ranges in `src/constants.ts`)
 - **Rest timer** — starts on set completion; timestamp-based so it survives the app being backgrounded, using `AppState` to reconcile elapsed time on foreground
 - **Progress screen** — charts of weight/volume per exercise over time
 
