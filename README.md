@@ -15,11 +15,12 @@ A workout tracking mobile app — log workouts, track sets/reps/weights over tim
 
 ## MVP feature set
 
-- Username/password signup & login (JWT-based auth, no email required)
+- No login: the app opens straight to your workouts, and everything is stored on the device (browser storage on the web, app storage on phones), so each device keeps its own data
 - Log workouts made up of exercises, each with sets (weight × reps)
 - Basic progress charts (e.g. weight/volume over time per exercise)
 - Rest timer between sets — uses the set-completion timestamp plus React Native's `AppState` API (rather than just a running in-app timer), so it stays accurate even if the app is backgrounded
-- Per-account settings (e.g. default rest timer duration) persisted server-side, so they follow the user across devices/logins
+- Configurable default rest timer, saved on the device
+- GymLock logo and a vivid, colorful dark theme
 
 Explicitly out of scope for the MVP: an exercise library/database, and any ML or analytics layer.
 
@@ -136,7 +137,7 @@ All routes except signup/login require a valid JWT in the `Authorization` header
 
 ## Mobile app structure
 
-- **Auth screens** — login / signup, storing the JWT securely on-device
+- **Local storage** — workouts, exercises, sets and settings are saved on the device via AsyncStorage (`mobile/src/storage`, `WorkoutsContext`, `SettingsContext`); there is no login
 - **Workout logging screens** — start a workout, add exercises, log sets (weight/reps) against each
 - **Rest timer** — starts on set completion; timestamp-based so it survives the app being backgrounded, using `AppState` to reconcile elapsed time on foreground
 - **Progress screen** — charts of weight/volume per exercise over time
@@ -154,11 +155,13 @@ docker compose down -v         # stop and wipe the local database
 
 ## Deployment
 
+**The app itself is local-first and no longer calls the API.** The FastAPI backend and Supabase database below remain in the repo and deployed, but nothing in the mobile/web client uses them right now.
+
 Everything runs on free tiers with no expiring trial:
 
 | Piece | Where | Notes |
 |---|---|---|
-| Website | Render **Static Site** `gymlock-web` | Built from `mobile/` with `npx expo export --platform web`; live at `https://gymlock-web.onrender.com` |
+| Website | Render **Static Site** `gymlock-web` | Built from `mobile/` with `npx expo export --platform web`; live at `https://gymlock-web.onrender.com`. Data lives in each visitor's browser storage |
 | API | Render **Web Service** `gymlock-api` (Docker runtime, `backend/Dockerfile`) | Live at `https://gymlock-api.onrender.com` (docs at `/docs`); auto-deploys on push to `main` |
 | Database | **Supabase** Postgres (free plan) | Reached through Supabase's IPv4 session pooler (Render's free tier has no IPv6) |
 
