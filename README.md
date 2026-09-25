@@ -142,7 +142,13 @@ All routes except signup/login require a valid JWT in the `Authorization` header
 
 ## Deployment
 
-The backend is deployed on [Render](https://render.com) as a free-tier web service (`gymlock-api`) with a free-tier managed Postgres instance (`gymlock-db`), both in the Oregon region:
+GymLock runs as a website as well as a mobile app: the same Expo codebase is exported for the web and hosted on [Render](https://render.com) as a static site, talking to the same API and Postgres, so workouts, exercises, and sets are saved per account regardless of which client is used.
+
+- **Live website**: `https://gymlock-web.onrender.com` (static site `gymlock-web`; built from `mobile/` with `npx expo export --platform web`, `EXPO_PUBLIC_API_URL` set to the API below)
+- The auth token is kept in `localStorage` on web and in SecureStore on native (`mobile/src/auth/tokenStorage.ts`)
+- Static sites don't rewrite unknown paths to the SPA, so the build copies `index.html` to `404.html`; deep links like `/progress` render correctly but are served with an HTTP 404 status. Adding a `/*` → `/index.html` rewrite rule in the Render dashboard (Redirects/Rewrites) makes them return 200.
+
+The backend is deployed on Render as a free-tier web service (`gymlock-api`) with a free-tier managed Postgres instance (`gymlock-db`), both in the Oregon region:
 
 - **Live API**: `https://gymlock-api.onrender.com` (interactive docs at `/docs`)
 - **Start command**: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT` — migrations run on every boot rather than as a separate pre-deploy step, since Render's pre-deploy-command and one-off-job features require a paid plan and are silently skipped on free tier
