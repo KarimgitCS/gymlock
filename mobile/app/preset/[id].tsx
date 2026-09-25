@@ -11,18 +11,11 @@ import {
 } from "react-native";
 
 import { Button } from "../../src/components/Button";
-import { NumberPicker } from "../../src/components/NumberPicker";
 import { TextField } from "../../src/components/TextField";
-import {
-  DEFAULT_REPS,
-  DEFAULT_SETS,
-  DEFAULT_WEIGHT,
-  REPS_OPTIONS,
-  SETS_OPTIONS,
-  WEIGHT_OPTIONS,
-} from "../../src/constants";
+import { DEFAULT_REPS, DEFAULT_SETS, DEFAULT_WEIGHT } from "../../src/constants";
 import { usePresets } from "../../src/presets/PresetsContext";
-import { accentFor, colors, radius, spacing } from "../../src/theme";
+import { colors, radius, spacing } from "../../src/theme";
+import { ExercisePlanEditor } from "../../src/workout/ExercisePlanEditor";
 
 interface DraftExercise {
   key: number;
@@ -123,57 +116,13 @@ export default function PresetEditorScreen() {
         />
 
         {exercises.map((exercise, index) => (
-          <View
+          <ExercisePlanEditor
             key={exercise.key}
-            style={[styles.exerciseCard, { borderLeftColor: accentFor(index) }]}
-          >
-            <View style={styles.exerciseHeader}>
-              <Text style={[styles.exerciseIndex, { color: accentFor(index) }]}>
-                Exercise {index + 1}
-              </Text>
-              <Pressable
-                testID={`ex-${index}-remove`}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove exercise ${index + 1}`}
-                onPress={() => setExercises((prev) => prev.filter((e) => e.key !== exercise.key))}
-              >
-                <Text style={styles.remove}>Remove</Text>
-              </Pressable>
-            </View>
-            <TextField
-              placeholder="Exercise name (e.g. Bench Press)"
-              value={exercise.name}
-              onChangeText={(text) => update(exercise.key, { name: text })}
-              testID={`ex-${index}-name`}
-            />
-            <View style={styles.pickerRow}>
-              <NumberPicker
-                label="Sets"
-                value={exercise.sets}
-                options={SETS_OPTIONS}
-                onChange={(v) => update(exercise.key, { sets: v })}
-                accent={colors.pink}
-                testID={`ex-${index}-sets`}
-              />
-              <NumberPicker
-                label="Reps"
-                value={exercise.reps}
-                options={REPS_OPTIONS}
-                onChange={(v) => update(exercise.key, { reps: v })}
-                accent={colors.cyan}
-                testID={`ex-${index}-reps`}
-              />
-              <NumberPicker
-                label="Weight"
-                value={exercise.weight}
-                options={WEIGHT_OPTIONS}
-                unit="lb"
-                onChange={(v) => update(exercise.key, { weight: v })}
-                accent={colors.orange}
-                testID={`ex-${index}-weight`}
-              />
-            </View>
-          </View>
+            index={index}
+            values={exercise}
+            onChange={(patch) => update(exercise.key, patch)}
+            onRemove={() => setExercises((prev) => prev.filter((e) => e.key !== exercise.key))}
+          />
         ))}
 
         <Button
@@ -216,35 +165,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: "center",
     marginTop: spacing.xl,
-  },
-  exerciseCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 5,
-    padding: spacing.md,
-    gap: spacing.sm + 2,
-  },
-  exerciseHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  exerciseIndex: {
-    fontSize: 13,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  remove: {
-    color: colors.danger,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  pickerRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
   },
   error: {
     color: colors.danger,
