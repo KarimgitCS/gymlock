@@ -9,7 +9,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import type { Exercise, Set, Workout } from "../types";
+import type { Exercise, Preset, Set, Workout } from "../types";
 import { loadJson, saveJson } from "../storage/storage";
 
 const WORKOUTS_KEY = "gymlock_workouts_v1";
@@ -24,7 +24,8 @@ interface WorkoutsContextValue {
   isLoading: boolean;
   getWorkout: (id: number) => Workout | undefined;
   getSetsForExercise: (name: string) => Set[];
-  createWorkout: (notes?: string) => Promise<Workout>;
+  createWorkout: () => Promise<Workout>;
+  createWorkoutFromPreset: (preset: Preset) => Promise<Workout>;
   addExercise: (workoutId: number, name: string) => Promise<Exercise>;
   logSet: (exerciseId: number, weight: number, reps: number) => Promise<Set>;
 }
@@ -83,13 +84,34 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
     [workouts]
   );
 
-  const createWorkout = useCallback(
-    async (notes?: string) => {
+  const createWorkout = useCallback(async () => {
+    const workout: Workout = {
+      id: nextIdRef.current++,
+      date: todayLocalIso(),
+      name: null,
+      notes: null,
+      exercises: [],
+    };
+    commit([workout, ...workoutsRef.current]);
+    return workout;
+  }, [commit]);
+
+  const createWorkoutFromPreset = useCallback(
+    async (preset: Preset) => {
+      const id = nextIdRef.current++;
       const workout: Workout = {
-        id: nextIdRef.current++,
+        id,
         date: todayLocalIso(),
-        notes: notes ?? null,
-        exercises: [],
+        name: preset.name,
+        notes: null,
+        exercises: preset.exercises.map((e, order) => ({
+          id: nextIdRef.current++,
+          workout_id: id,
+          name: e.name,
+          order,
+          plan: { sets: e.sets, reps: e.reps, weight: e.weight },
+          sets: [],
+        })),
       };
       commit([workout, ...workoutsRef.current]);
       return workout;
@@ -150,10 +172,20 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
       getWorkout,
       getSetsForExercise,
       createWorkout,
+      createWorkoutFromPreset,
       addExercise,
       logSet,
     }),
-    [workouts, isLoading, getWorkout, getSetsForExercise, createWorkout, addExercise, logSet]
+    [
+      workouts,
+      isLoading,
+      getWorkout,
+      getSetsForExercise,
+      createWorkout,
+      createWorkoutFromPreset,
+      addExercise,
+      logSet,
+    ]
   );
 
   return <WorkoutsContext.Provider value={value}>{children}</WorkoutsContext.Provider>;
