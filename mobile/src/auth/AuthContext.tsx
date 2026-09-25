@@ -8,7 +8,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import { api } from "../api/client";
+import { api, setUnauthorizedHandler } from "../api/client";
 import type { User } from "../api/types";
 import { tokenStorage } from "./tokenStorage";
 
@@ -51,6 +51,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
       .then(setUser)
       .catch(() => setUser(null));
   }, [token]);
+
+  // An expired or unknown token means the session is over: clear it so the auth guard
+  // sends the user back to the login screen instead of leaving a dead-looking app.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      tokenStorage.remove(TOKEN_KEY);
+      setToken(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const persistToken = async (newToken: string) => {
     await tokenStorage.set(TOKEN_KEY, newToken);

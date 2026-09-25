@@ -1,6 +1,13 @@
 import { API_BASE_URL } from "../config";
 import type { Exercise, Set, Token, User, Workout } from "./types";
 
+let unauthorizedHandler: (() => void) | null = null;
+
+// Called when an authenticated request is rejected (expired or unknown login).
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -42,6 +49,7 @@ async function request<T>(
     } catch {
       // response wasn't JSON; fall back to statusText
     }
+    if (response.status === 401 && token) unauthorizedHandler?.();
     throw new ApiError(response.status, detail);
   }
 
