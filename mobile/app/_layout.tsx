@@ -1,13 +1,14 @@
 import { Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
-import { AuthProvider } from "../src/auth/AuthContext";
+import { Logo } from "../src/components/Logo";
+import { SettingsProvider } from "../src/settings/SettingsContext";
 import { colors } from "../src/theme";
 import { WorkoutsProvider } from "../src/workouts/WorkoutsContext";
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
+    <SettingsProvider>
       <WorkoutsProvider>
         <View style={styles.page}>
           <View style={styles.frame}>
@@ -15,23 +16,30 @@ export default function RootLayout() {
               screenOptions={{
                 headerShown: false,
                 headerStyle: { backgroundColor: colors.background },
-                headerTintColor: colors.text,
-                headerTitleStyle: { color: colors.text },
+                headerTintColor: colors.pink,
+                headerTitleStyle: { color: colors.text, fontWeight: "700" },
                 headerShadowVisible: false,
                 contentStyle: { backgroundColor: colors.background },
               }}
             >
-              <Stack.Screen name="(auth)" />
               <Stack.Screen name="(tabs)" />
               <Stack.Screen
                 name="workout/[id]"
-                options={{ headerShown: true, title: "Workout" }}
+                options={{
+                  headerShown: true,
+                  title: "Workout",
+                  headerRight: () => (
+                    <View style={styles.headerLogo}>
+                      <Logo size={28} />
+                    </View>
+                  ),
+                }}
               />
             </Stack>
           </View>
         </View>
       </WorkoutsProvider>
-    </AuthProvider>
+    </SettingsProvider>
   );
 }
 
@@ -46,5 +54,8 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     maxWidth: 600,
+  },
+  headerLogo: {
+    paddingRight: 8,
   },
 });

@@ -1,30 +1,32 @@
-import { Redirect, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import { Text } from "react-native";
 
-import { useAuth } from "../../src/auth/AuthContext";
+import { BrandHeader } from "../../src/components/Logo";
 import { colors } from "../../src/theme";
 
 function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
-  return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{symbol}</Text>
-  );
+  return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.55 }}>{symbol}</Text>;
 }
 
 export default function TabsLayout() {
-  const { token, isLoading } = useAuth();
-
-  if (isLoading) return null;
-  if (!token) return <Redirect href="/(auth)/login" />;
-
   return (
     <Tabs
       screenOptions={{
+        headerLeft: () => <BrandHeader />,
+        headerTitle: "",
         headerStyle: { backgroundColor: colors.background },
-        headerTitleStyle: { color: colors.text },
         headerShadowVisible: false,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarActiveTintColor: colors.primary,
+        sceneStyle: { backgroundColor: colors.background },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          height: 72,
+          paddingBottom: 12,
+          paddingTop: 8,
+        },
+        tabBarActiveTintColor: colors.pink,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: { fontWeight: "700", fontSize: 11, lineHeight: 16 },
       }}
     >
       <Tabs.Screen
@@ -42,9 +44,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="settings"
         options={{
-          title: "Profile",
+          title: "Settings",
           tabBarIcon: ({ focused }) => <TabIcon symbol="⚙️" focused={focused} />,
         }}
       />
