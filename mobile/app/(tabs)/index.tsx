@@ -41,14 +41,18 @@ function WorkoutCard({ workout, onPress }: { workout: Workout; onPress: () => vo
 
 export default function WorkoutsScreen() {
   const router = useRouter();
-  const { workouts, isLoading, refresh, createWorkout } = useWorkouts();
+  const { workouts, isLoading, error, refresh, createWorkout } = useWorkouts();
   const [creating, setCreating] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const startWorkout = async () => {
     setCreating(true);
+    setStartError(null);
     try {
       const workout = await createWorkout();
       router.push(`/workout/${workout.id}`);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : "Could not start a workout");
     } finally {
       setCreating(false);
     }
@@ -78,6 +82,9 @@ export default function WorkoutsScreen() {
         )}
       />
       <View style={styles.footer}>
+        {startError || error ? (
+          <Text style={styles.error}>{startError ?? error}</Text>
+        ) : null}
         <Button title="Start workout" onPress={startWorkout} loading={creating} />
       </View>
     </View>
@@ -124,6 +131,11 @@ const styles = StyleSheet.create({
   cardExercises: {
     color: colors.primary,
     fontSize: 13,
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 14,
+    marginBottom: spacing.sm,
   },
   footer: {
     padding: spacing.md,
