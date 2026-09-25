@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { api } from "../../src/api/client";
-import type { Set as LoggedSet } from "../../src/api/types";
-import { useAuth } from "../../src/auth/AuthContext";
 import { LineChart } from "../../src/components/LineChart";
-import { colors, radius, spacing } from "../../src/theme";
+import { accentFor, colors, radius, spacing } from "../../src/theme";
 import { groupSetsBySession } from "../../src/utils/progress";
 import { useWorkouts } from "../../src/workouts/WorkoutsContext";
 
@@ -14,28 +11,34 @@ type Metric = "weight" | "volume";
 function Chip({
   label,
   active,
+  color,
   onPress,
 }: {
   label: string;
   active: boolean;
+  color: string;
   onPress: () => void;
 }) {
   return (
-    <Pressable style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    <Pressable
+      style={[styles.chip, { borderColor: color }, active && { backgroundColor: color }]}
+      onPress={onPress}
+    >
+      <Text style={[styles.chipText, { color: active ? colors.background : color }]}>{label}</Text>
     </Pressable>
   );
 }
 
 export default function ProgressScreen() {
-  const { token } = useAuth();
-  const { workouts } = useWorkouts();
+  const { workouts, getSetsForExercise } = useWorkouts();
 
   const exerciseNames = useMemo(() => {
     const names: string[] = [];
     for (const workout of workouts) {
       for (const exercise of workout.exercises) {
-        if (!names.includes(exercise.name)) names.push(exercise.name);
+        if (!names.some((n) => n.toLowerCase() === exercise.name.toLowerCase())) {
+          names.push(exercise.name);
+        }
       }
     }
     return names;
@@ -43,36 +46,25 @@ export default function ProgressScreen() {
 
   const [selected, setSelected] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("weight");
-  const [sets, setSets] = useState<LoggedSet[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!selected && exerciseNames.length > 0) setSelected(exerciseNames[0]);
+    if (exerciseNames.length === 0) setSelected(null);
+    else if (!selected || !exerciseNames.includes(selected)) setSelected(exerciseNames[0]);
   }, [exerciseNames, selected]);
 
-  useEffect(() => {
-    if (!token || !selected) return;
-    setIsLoading(true);
-    api
-      .exerciseHistoryByName(token, selected)
-      .then(setSets)
-      .finally(() => setIsLoading(false));
-  }, [token, selected]);
-
-  const sessions = useMemo(() => groupSetsBySession(sets), [sets]);
-  const points = useMemo(
-    () =>
-      sessions.map((s) => ({
-        x: s.date.getTime(),
-        y: metric === "weight" ? s.maxWeight : s.volume,
-      })),
-    [sessions, metric]
-  );
+  const points = useMemo(() => {
+    if (!selected) return [];
+    return groupSetsBySession(getSetsForExercise(selected)).map((s) => ({
+      x: s.date.getTime(),
+      y: metric === "weight" ? s.maxWeight : s.volume,
+    }));
+  }, [selected, metric, getSetsForExercise]);
 
   if (exerciseNames.length === 0) {
     return (
       <View style={styles.screen}>
         <View style={styles.empty}>
+          <Text style={styles.emptyEmoji}>📈</Text>
           <Text style={styles.emptyTitle}>No progress yet</Text>
           <Text style={styles.emptySubtitle}>
             Log a workout with a few sets and your progress will show up here.
@@ -81,6 +73,8 @@ export default function ProgressScreen() {
       </View>
     );
   }
+
+  const accent = accentFor(selected ?? "");
 
   return (
     <View style={styles.screen}>
@@ -91,26 +85,29 @@ export default function ProgressScreen() {
         contentContainerStyle={styles.chipRow}
       >
         {exerciseNames.map((name) => (
-          <Chip key={name} label={name} active={name === selected} onPress={() => setSelected(name)} />
+          <Chip
+            key={name}
+            label={name}
+            color={accentFor(name)}
+            active={name === selected}
+            onPress={() => setSelected(name)}
+          />
         ))}
       </ScrollView>
 
       <View style={styles.content}>
         <View style={styles.metricRow}>
-          <Chip label="Max weight" active={metric === "weight"} onPress={() => setMetric("weight")} />
-          <Chip label="Volume" active={metric === "volume"} onPress={() => setMetric("volume")} />
+          <Chip label="Max weight" color={colors.cyan} active={metric === "weight"} onPress={() => setMetric("weight")} />
+          <Chip label="Volume" color={colors.orange} active={metric === "volume"} onPress={() => setMetric("volume")} />
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{selected}</Text>
-          {isLoading ? (
-            <Text style={styles.emptySubtitle}>Loading…</Text>
-          ) : (
-            <LineChart
-              points={points}
-              formatY={(y) => (metric === "weight" ? `${y} lb` : `${y} lb·reps`)}
-            />
-          )}
+        <View style={[styles.card, { borderTopColor: accent }]}>
+          <Text style={[styles.cardTitle, { color: accent }]}>{selected}</Text>
+          <LineChart
+            points={points}
+            color={accent}
+            formatY={(y) => (metric === "weight" ? `${y} lb` : `${y} lb·reps`)}
+          />
         </View>
       </View>
     </View>
@@ -133,23 +130,14 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm + 4,
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
   chipText: {
-    color: colors.text,
     fontSize: 13,
-    fontWeight: "500",
-  },
-  chipTextActive: {
-    color: colors.primaryText,
+    fontWeight: "700",
   },
   content: {
     padding: spacing.md,
@@ -164,12 +152,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    borderTopWidth: 4,
     padding: spacing.md,
   },
   cardTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "800",
     marginBottom: spacing.sm,
   },
   empty: {
@@ -179,10 +167,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.xs,
   },
+  emptyEmoji: {
+    fontSize: 44,
+  },
   emptyTitle: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "800",
   },
   emptySubtitle: {
     color: colors.textMuted,

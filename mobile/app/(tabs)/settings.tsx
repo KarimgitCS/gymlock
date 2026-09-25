@@ -1,22 +1,20 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ApiError } from "../../src/api/client";
-import { useAuth } from "../../src/auth/AuthContext";
 import { Button } from "../../src/components/Button";
 import { TextField } from "../../src/components/TextField";
+import { useSettings } from "../../src/settings/SettingsContext";
 import { colors, radius, spacing } from "../../src/theme";
 
-export default function ProfileScreen() {
-  const { user, logout, updateRestTimerSeconds } = useAuth();
-  const [restSeconds, setRestSeconds] = useState("");
-  const [saving, setSaving] = useState(false);
+export default function SettingsScreen() {
+  const { restTimerSeconds, setRestTimerSeconds } = useSettings();
+  const [restSeconds, setRestSeconds] = useState(String(restTimerSeconds));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (user) setRestSeconds(String(user.rest_timer_seconds));
-  }, [user]);
+    setRestSeconds(String(restTimerSeconds));
+  }, [restTimerSeconds]);
 
   const onSave = async () => {
     const seconds = Number(restSeconds);
@@ -26,27 +24,19 @@ export default function ProfileScreen() {
       setError("Enter a rest time between 10 and 600 seconds");
       return;
     }
-    setSaving(true);
-    try {
-      await updateRestTimerSeconds(Math.round(seconds));
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save settings");
-    } finally {
-      setSaving(false);
-    }
+    await setRestTimerSeconds(Math.round(seconds));
+    setSaved(true);
   };
 
   return (
     <View style={styles.screen}>
       <View style={styles.content}>
-        <Text style={styles.title}>Profile</Text>
-        {user ? <Text style={styles.username}>@{user.username}</Text> : null}
+        <Text style={styles.title}>Settings</Text>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Default rest timer</Text>
           <Text style={styles.cardSubtitle}>
-            Saved to your account and used after logging a set.
+            Starts after each logged set. Saved on this device.
           </Text>
           <View style={styles.settingRow}>
             <TextField
@@ -62,10 +52,16 @@ export default function ProfileScreen() {
           </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {saved ? <Text style={styles.success}>Saved</Text> : null}
-          <Button title="Save" onPress={onSave} loading={saving} variant="secondary" />
+          <Button title="Save" onPress={onSave} />
         </View>
 
-        <Button title="Log out" onPress={logout} variant="secondary" />
+        <View style={[styles.card, styles.noteCard]}>
+          <Text style={styles.cardTitle}>Your data stays here</Text>
+          <Text style={styles.cardSubtitle}>
+            There are no accounts. Workouts and settings are stored on this device only, so
+            clearing your browser data or uninstalling the app removes them.
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -82,30 +78,31 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  username: {
-    color: colors.textMuted,
-    fontSize: 15,
-    marginTop: -spacing.sm,
+    fontSize: 26,
+    fontWeight: "800",
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    borderLeftWidth: 5,
+    borderLeftColor: colors.orange,
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  noteCard: {
+    borderLeftColor: colors.cyan,
   },
   cardTitle: {
     color: colors.text,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   cardSubtitle: {
     color: colors.textMuted,
     fontSize: 13,
+    lineHeight: 18,
   },
   settingRow: {
     flexDirection: "row",
@@ -126,5 +123,6 @@ const styles = StyleSheet.create({
   success: {
     color: colors.success,
     fontSize: 13,
+    fontWeight: "600",
   },
 });

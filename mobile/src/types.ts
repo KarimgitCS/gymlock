@@ -21,15 +21,3 @@ export interface Workout {
   notes: string | null;
   exercises: Exercise[];
 }
-
-export interface Token {
-  access_token: string;
-  token_type: string;
-}
-
-export interface User {
-  id: number;
-  username: string;
-  rest_timer_seconds: number;
-  created_at: string;
-}

@@ -4,20 +4,26 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
 
-import { api } from "../api/client";
-import type { Exercise, Set, Workout } from "../api/types";
-import { useAuth } from "../auth/AuthContext";
+import type { Exercise, Set, Workout } from "../types";
+import { loadJson, saveJson } from "../storage/storage";
+
+const WORKOUTS_KEY = "gymlock_workouts_v1";
+
+interface StoredWorkouts {
+  nextId: number;
+  workouts: Workout[];
+}
 
 interface WorkoutsContextValue {
   workouts: Workout[];
   isLoading: boolean;
-  error: string | null;
-  refresh: () => Promise<void>;
   getWorkout: (id: number) => Workout | undefined;
+  getSetsForExercise: (name: string) => Set[];
   createWorkout: (notes?: string) => Promise<Workout>;
   addExercise: (workoutId: number, name: string) => Promise<Exercise>;
   logSet: (exerciseId: number, weight: number, reps: number) => Promise<Set>;
@@ -25,95 +31,132 @@ interface WorkoutsContextValue {
 
 const WorkoutsContext = createContext<WorkoutsContextValue | null>(null);
 
-export function WorkoutsProvider({ children }: PropsWithChildren) {
-  const { token } = useAuth();
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function todayLocalIso(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 
-  const refresh = useCallback(async () => {
-    if (!token) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      setWorkouts(await api.listWorkouts(token));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load workouts");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token]);
+export function WorkoutsProvider({ children }: PropsWithChildren) {
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  // The ref is the source of truth so back-to-back actions never read stale state.
+  const workoutsRef = useRef<Workout[]>([]);
+  const nextIdRef = useRef(1);
 
   useEffect(() => {
-    if (token) refresh();
-    else setWorkouts([]);
-  }, [token, refresh]);
+    loadJson<StoredWorkouts>(WORKOUTS_KEY).then((stored) => {
+      if (stored) {
+        workoutsRef.current = stored.workouts;
+        nextIdRef.current = stored.nextId;
+        setWorkouts(stored.workouts);
+      }
+      setIsLoading(false);
+    });
+  }, []);
+
+  const commit = useCallback((next: Workout[]) => {
+    workoutsRef.current = next;
+    setWorkouts(next);
+    saveJson(WORKOUTS_KEY, { nextId: nextIdRef.current, workouts: next } satisfies StoredWorkouts);
+  }, []);
 
   const getWorkout = useCallback(
     (id: number) => workouts.find((w) => w.id === id),
     [workouts]
   );
 
+  const getSetsForExercise = useCallback(
+    (name: string) => {
+      const wanted = name.trim().toLowerCase();
+      const sets: Set[] = [];
+      for (const workout of workouts) {
+        for (const exercise of workout.exercises) {
+          if (exercise.name.trim().toLowerCase() === wanted) sets.push(...exercise.sets);
+        }
+      }
+      return sets.sort(
+        (a, b) => new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime()
+      );
+    },
+    [workouts]
+  );
+
   const createWorkout = useCallback(
     async (notes?: string) => {
-      if (!token) throw new Error("Not authenticated");
-      const workout = await api.createWorkout(token, notes);
-      setWorkouts((prev) => [workout, ...prev]);
+      const workout: Workout = {
+        id: nextIdRef.current++,
+        date: todayLocalIso(),
+        notes: notes ?? null,
+        exercises: [],
+      };
+      commit([workout, ...workoutsRef.current]);
       return workout;
     },
-    [token]
+    [commit]
   );
 
   const addExercise = useCallback(
     async (workoutId: number, name: string) => {
-      if (!token) throw new Error("Not authenticated");
-      const workout = workouts.find((w) => w.id === workoutId);
-      const order = workout ? workout.exercises.length : 0;
-      const exercise = await api.addExercise(token, workoutId, name, order);
-      setWorkouts((prev) =>
-        prev.map((w) =>
+      const workout = workoutsRef.current.find((w) => w.id === workoutId);
+      if (!workout) throw new Error("Workout not found");
+      const exercise: Exercise = {
+        id: nextIdRef.current++,
+        workout_id: workoutId,
+        name,
+        order: workout.exercises.length,
+        sets: [],
+      };
+      commit(
+        workoutsRef.current.map((w) =>
           w.id === workoutId ? { ...w, exercises: [...w.exercises, exercise] } : w
         )
       );
       return exercise;
     },
-    [token, workouts]
+    [commit]
   );
 
   const logSet = useCallback(
     async (exerciseId: number, weight: number, reps: number) => {
-      if (!token) throw new Error("Not authenticated");
-      const newSet = await api.logSet(token, exerciseId, weight, reps);
-      setWorkouts((prev) =>
-        prev.map((w) => ({
-          ...w,
-          exercises: w.exercises.map((e) =>
-            e.id === exerciseId ? { ...e, sets: [...e.sets, newSet] } : e
-          ),
-        }))
-      );
-      return newSet;
+      let created: Set | null = null;
+      const next = workoutsRef.current.map((w) => ({
+        ...w,
+        exercises: w.exercises.map((e) => {
+          if (e.id !== exerciseId) return e;
+          created = {
+            id: nextIdRef.current++,
+            exercise_id: exerciseId,
+            weight,
+            reps,
+            set_number: e.sets.length + 1,
+            completed_at: new Date().toISOString(),
+          };
+          return { ...e, sets: [...e.sets, created] };
+        }),
+      }));
+      if (!created) throw new Error("Exercise not found");
+      commit(next);
+      return created;
     },
-    [token]
+    [commit]
   );
 
   const value = useMemo<WorkoutsContextValue>(
     () => ({
       workouts,
       isLoading,
-      error,
-      refresh,
       getWorkout,
+      getSetsForExercise,
       createWorkout,
       addExercise,
       logSet,
     }),
-    [workouts, isLoading, error, refresh, getWorkout, createWorkout, addExercise, logSet]
+    [workouts, isLoading, getWorkout, getSetsForExercise, createWorkout, addExercise, logSet]
   );
 
-  return (
-    <WorkoutsContext.Provider value={value}>{children}</WorkoutsContext.Provider>
-  );
+  return <WorkoutsContext.Provider value={value}>{children}</WorkoutsContext.Provider>;
 }
 
 export function useWorkouts(): WorkoutsContextValue {

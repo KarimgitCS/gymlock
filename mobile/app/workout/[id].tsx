@@ -1,5 +1,5 @@
 import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,12 +9,12 @@ import {
   View,
 } from "react-native";
 
-import type { Exercise } from "../../src/api/types";
-import { useAuth } from "../../src/auth/AuthContext";
+import type { Exercise } from "../../src/types";
+import { useSettings } from "../../src/settings/SettingsContext";
 import { Button } from "../../src/components/Button";
 import { RestTimer } from "../../src/components/RestTimer";
 import { TextField } from "../../src/components/TextField";
-import { colors, radius, spacing } from "../../src/theme";
+import { accentFor, colors, radius, spacing } from "../../src/theme";
 import { formatDate } from "../../src/utils/date";
 import { useWorkouts } from "../../src/workouts/WorkoutsContext";
 
@@ -51,15 +51,15 @@ function ExerciseCard({
   };
 
   return (
-    <View style={styles.exerciseCard}>
-      <Text style={styles.exerciseName}>{exercise.name}</Text>
+    <View style={[styles.exerciseCard, { borderLeftColor: accentFor(exercise.name) }]}>
+      <Text style={[styles.exerciseName, { color: accentFor(exercise.name) }]}>{exercise.name}</Text>
 
       {exercise.sets.length > 0 ? (
         <View style={styles.setsTable}>
           {exercise.sets.map((s) => (
             <View key={s.id} style={styles.setRow}>
               <Text style={styles.setLabel}>Set {s.set_number}</Text>
-              <Text style={styles.setValue}>
+              <Text style={[styles.setValue, { color: colors.cyan }]}>
                 {s.weight} lb × {s.reps}
               </Text>
             </View>
@@ -92,20 +92,13 @@ export default function WorkoutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const workoutId = Number(id);
   const router = useRouter();
-  const { user } = useAuth();
-  const { getWorkout, refresh, addExercise, logSet } = useWorkouts();
+  const { restTimerSeconds: restDuration } = useSettings();
+  const { getWorkout, isLoading, addExercise, logSet } = useWorkouts();
   const workout = getWorkout(workoutId);
-  const restDuration = user?.rest_timer_seconds ?? 90;
 
   const [exerciseName, setExerciseName] = useState("");
   const [addingExercise, setAddingExercise] = useState(false);
   const [restTimerKey, setRestTimerKey] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!workout) refresh();
-    // Only re-run if the workout disappears from the cache (e.g. cold start / deep link).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workout]);
 
   const onLogSet = async (exerciseId: number, weight: number, reps: number) => {
     await logSet(exerciseId, weight, reps);
@@ -126,7 +119,12 @@ export default function WorkoutDetailScreen() {
   if (!workout) {
     return (
       <View style={styles.screen}>
-        <Text style={styles.emptyText}>Loading workout…</Text>
+        <Text style={styles.emptyText}>{isLoading ? "Loading workout…" : "Workout not found"}</Text>
+        {isLoading ? null : (
+          <Link href="/" style={styles.notFoundLink}>
+            ‹ Back to workouts
+          </Link>
+        )}
       </View>
     );
   }
@@ -143,7 +141,7 @@ export default function WorkoutDetailScreen() {
           headerLeft: router.canGoBack()
             ? undefined
             : () => (
-                <Link href="/(tabs)" style={styles.backLink}>
+                <Link href="/" style={styles.backLink}>
                   ‹ Workouts
                 </Link>
               ),
@@ -191,9 +189,16 @@ export default function WorkoutDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  backLink: {
-    color: colors.primary,
+  notFoundLink: {
+    color: colors.pink,
     fontSize: 16,
+    textAlign: "center",
+    marginTop: spacing.md,
+  },
+  backLink: {
+    color: colors.pink,
+    fontSize: 16,
+    fontWeight: "700",
     paddingHorizontal: spacing.sm,
   },
   screen: {
@@ -215,13 +220,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    borderLeftWidth: 5,
     padding: spacing.md,
     gap: spacing.sm,
   },
   exerciseName: {
     color: colors.text,
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "800",
   },
   setsTable: {
     gap: spacing.xs,
@@ -236,8 +242,8 @@ const styles = StyleSheet.create({
   },
   setValue: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "700",
   },
   setInputRow: {
     flexDirection: "row",

@@ -1,4 +1,4 @@
-import type { Set as LoggedSet } from "../api/types";
+import type { Set as LoggedSet } from "../types";
 
 export interface SessionPoint {
   exerciseId: number;
