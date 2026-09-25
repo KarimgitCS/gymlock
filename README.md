@@ -8,8 +8,9 @@ A workout tracking mobile app — log workouts, track sets/reps/weights over tim
 |----------|----------------------------------------------------|
 | Mobile   | React Native via Expo                              |
 | Backend  | FastAPI (Python)                                   |
-| Database | PostgreSQL                                         |
+| Database | PostgreSQL (Supabase in production, Docker locally) |
 | Auth     | JWT (password hashing + signed tokens)             |
+| Packaging | Docker (API image + local compose stack)          |
 | Dev tooling | Expo Go (live device preview during development) |
 
 ## MVP feature set
@@ -140,22 +141,31 @@ All routes except signup/login require a valid JWT in the `Authorization` header
 - **Rest timer** — starts on set completion; timestamp-based so it survives the app being backgrounded, using `AppState` to reconcile elapsed time on foreground
 - **Progress screen** — charts of weight/volume per exercise over time
 
+## Running with Docker (local)
+
+The API and a Postgres database run in containers, so nothing needs installing besides Docker:
+
+```bash
+docker compose up --build      # API on http://localhost:8000, Postgres on localhost:5433
+docker compose down -v         # stop and wipe the local database
+```
+
+`backend/Dockerfile` is the same image used in production. It runs `alembic upgrade head` on start, then serves the API with uvicorn on `$PORT`. Dependencies in `backend/requirements.txt` are pinned to tested versions.
+
 ## Deployment
 
-GymLock runs as a website as well as a mobile app: the same Expo codebase is exported for the web and hosted on [Render](https://render.com) as a static site, talking to the same API and Postgres, so workouts, exercises, and sets are saved per account regardless of which client is used.
+Everything runs on free tiers with no expiring trial:
 
-- **Live website**: `https://gymlock-web.onrender.com` (static site `gymlock-web`; built from `mobile/` with `npx expo export --platform web`, `EXPO_PUBLIC_API_URL` set to the API below)
-- The auth token is kept in `localStorage` on web and in SecureStore on native (`mobile/src/auth/tokenStorage.ts`)
-- Static sites don't rewrite unknown paths to the SPA, so the build copies `index.html` to `404.html`; deep links like `/progress` render correctly but are served with an HTTP 404 status. Adding a `/*` → `/index.html` rewrite rule in the Render dashboard (Redirects/Rewrites) makes them return 200.
+| Piece | Where | Notes |
+|---|---|---|
+| Website | Render **Static Site** `gymlock-web` | Built from `mobile/` with `npx expo export --platform web`; live at `https://gymlock-web.onrender.com` |
+| API | Render **Web Service** `gymlock-api` (Docker runtime, `backend/Dockerfile`) | Live at `https://gymlock-api.onrender.com` (docs at `/docs`); auto-deploys on push to `main` |
+| Database | **Supabase** Postgres (free plan) | Reached through Supabase's IPv4 session pooler (Render's free tier has no IPv6) |
 
-The backend is deployed on Render as a free-tier web service (`gymlock-api`) with a free-tier managed Postgres instance (`gymlock-db`), both in the Oregon region:
-
-- **Live API**: `https://gymlock-api.onrender.com` (interactive docs at `/docs`)
-- **Start command**: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT` — migrations run on every boot rather than as a separate pre-deploy step, since Render's pre-deploy-command and one-off-job features require a paid plan and are silently skipped on free tier
-- **Root directory**: `backend/` (Render builds from this subdirectory of the repo)
-- Auto-deploys on every push to `main`
-
-Caveats of the free tier: the Postgres database expires 30 days after creation unless upgraded, and the free web service spins down after periods of inactivity (the first request after idling will be slow while it spins back up).
+- **Website:** the same Expo codebase as the mobile app. The auth token is kept in `localStorage` on web and SecureStore on native (`mobile/src/auth/tokenStorage.ts`). Static sites don't rewrite unknown paths, so the build copies `index.html` to `404.html`: deep links like `/progress` render, but with an HTTP 404 status. A `/*` → `/index.html` rewrite rule in the Render dashboard makes them return 200.
+- **Database:** `DATABASE_URL` is the Supabase pooler connection string (`postgresql://postgres.<ref>:<password>@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require`). Row level security is enabled on every table (migration `9c1e4b7a2d10`) so Supabase's auto-generated REST API can't expose them; the API connects as the table owner, which bypasses RLS.
+- **API environment:** `DATABASE_URL`, `JWT_SECRET`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
+- **Free-tier behavior:** the Render web service spins down when idle, so the first request after a quiet period is slow. Supabase pauses free projects after about a week of inactivity and they can be resumed from the dashboard.
 
 To point the mobile app at the deployed API instead of a local backend, set in `mobile/.env`:
 
