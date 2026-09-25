@@ -87,6 +87,7 @@ export default function ProgressScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
         contentContainerStyle={styles.chipRow}
       >
         {exerciseNames.map((name) => (
@@ -117,6 +118,9 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
+  chipScroll: {
+    flexGrow: 0,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,

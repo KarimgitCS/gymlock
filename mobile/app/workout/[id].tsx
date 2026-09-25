@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -91,6 +91,7 @@ function ExerciseCard({
 export default function WorkoutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const workoutId = Number(id);
+  const router = useRouter();
   const { user } = useAuth();
   const { getWorkout, refresh, addExercise, logSet } = useWorkouts();
   const workout = getWorkout(workoutId);
@@ -135,7 +136,19 @@ export default function WorkoutDetailScreen() {
       style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Stack.Screen options={{ title: formatDate(workout.date) }} />
+      <Stack.Screen
+        options={{
+          title: formatDate(workout.date),
+          // After a browser reload there is no history to go back to, so offer a link home.
+          headerLeft: router.canGoBack()
+            ? undefined
+            : () => (
+                <Link href="/(tabs)" style={styles.backLink}>
+                  ‹ Workouts
+                </Link>
+              ),
+        }}
+      />
 
       <ScrollView contentContainerStyle={styles.content}>
         {workout.exercises.length === 0 ? (
@@ -178,6 +191,11 @@ export default function WorkoutDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  backLink: {
+    color: colors.primary,
+    fontSize: 16,
+    paddingHorizontal: spacing.sm,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,
