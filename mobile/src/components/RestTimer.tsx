@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, Vibration, View } from "react-native";
 
 import { useRestTimer } from "../hooks/useRestTimer";
@@ -11,6 +11,7 @@ interface RestTimerProps {
 
 export function RestTimer({ durationSeconds = 90, onDismiss }: RestTimerProps) {
   const { remaining, isDone, addSeconds } = useRestTimer(durationSeconds);
+  const [totalSeconds, setTotalSeconds] = useState(durationSeconds);
   const hasVibratedRef = useRef(false);
 
   useEffect(() => {
@@ -23,8 +24,11 @@ export function RestTimer({ durationSeconds = 90, onDismiss }: RestTimerProps) {
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
 
+  const fraction = Math.min(1, Math.max(0, remaining / totalSeconds));
+
   return (
     <View style={[styles.container, isDone && styles.containerDone]}>
+      <View style={styles.row}>
       <View>
         <Text style={styles.label}>{isDone ? "Rest complete" : "Resting"}</Text>
         <Text style={styles.time}>
@@ -33,7 +37,13 @@ export function RestTimer({ durationSeconds = 90, onDismiss }: RestTimerProps) {
       </View>
       <View style={styles.actions}>
         {!isDone ? (
-          <Pressable style={styles.chip} onPress={() => addSeconds(30)}>
+          <Pressable
+            style={styles.chip}
+            onPress={() => {
+              addSeconds(30);
+              setTotalSeconds((t) => t + 30);
+            }}
+          >
             <Text style={styles.chipText}>+30s</Text>
           </Pressable>
         ) : null}
@@ -41,27 +51,50 @@ export function RestTimer({ durationSeconds = 90, onDismiss }: RestTimerProps) {
           <Text style={styles.chipText}>{isDone ? "Done" : "Skip"}</Text>
         </Pressable>
       </View>
+      </View>
+      <View style={styles.track}>
+        <View
+          style={[
+            styles.fill,
+            { width: `${fraction * 100}%`, backgroundColor: isDone ? colors.mint : colors.pink },
+          ]}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    gap: spacing.sm,
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
     padding: spacing.md,
   },
   containerDone: {
-    borderColor: colors.success,
+    borderColor: colors.mint,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  track: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+    overflow: "hidden",
+  },
+  fill: {
+    height: 6,
+    borderRadius: 3,
   },
   label: {
-    color: colors.textMuted,
+    color: colors.pink,
     fontSize: 12,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
