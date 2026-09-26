@@ -1,13 +1,20 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { useEffect, useRef, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
 import { NumberPicker } from "../components/NumberPicker";
 import { REPS_OPTIONS, WEIGHT_OPTIONS } from "../constants";
 import { useRestTimer } from "../hooks/useRestTimer";
 import { useSettings } from "../settings/SettingsContext";
-import { cancelRestAlert, playRestEndCue, primeAudio, scheduleRestAlert } from "../timers/restAlerts";
+import {
+  cancelRestAlert,
+  getAlertPermission,
+  playRestEndCue,
+  primeAudio,
+  scheduleRestAlert,
+} from "../timers/restAlerts";
 import { accentFor, colors, radius, spacing } from "../theme";
 import type { Exercise, Workout } from "../types";
 import { describeNextAfterSet, describeTarget, getWorkoutProgress } from "../utils/workoutProgress";
@@ -94,12 +101,14 @@ function RestPanel({
   remaining,
   total,
   nextUp,
+  alertNote,
   onAdd,
   onSkip,
 }: {
   remaining: number;
   total: number;
   nextUp: string | null;
+  alertNote: string | null;
   onAdd: () => void;
   onSkip: () => void;
 }) {
@@ -119,6 +128,16 @@ function RestPanel({
           <Text style={styles.nextText}>{nextUp}</Text>
         </View>
       ) : null}
+      {alertNote ? (
+        <Text style={styles.alertNote} testID="alert-note">
+          {alertNote}
+        </Text>
+      ) : Platform.OS === "web" ? (
+        <Text style={styles.webHint} testID="web-hint">
+          Keep this page open: a browser can't alert you from a locked or background page. Your screen
+          stays on during the workout.
+        </Text>
+      ) : null}
       <View style={styles.restButtons}>
         <View style={{ flex: 1 }}>
           <Button title="+30 s" variant="secondary" onPress={onAdd} />
@@ -137,6 +156,8 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
   const { restTimerSeconds } = useSettings();
   const { completeSet, setRest, finishWorkout, deleteWorkout } = useWorkouts();
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [alertNote, setAlertNote] = useState<string | null>(null);
+  const baseTitle = useRef(Platform.OS === "web" ? document.title : "");
 
   const progress = getWorkoutProgress(workout);
   const rest = workout.rest ?? null;
@@ -157,8 +178,12 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
     primeAudio();
     const upcoming = describeNextAfterSet(workout, current.id);
     const { finished } = await completeSet(workout.id, current.id, weight, reps, restTimerSeconds);
-    if (finished || !upcoming) await cancelRestAlert();
-    else await scheduleRestAlert(restTimerSeconds, `Next: ${upcoming}`);
+    if (finished || !upcoming) {
+      await cancelRestAlert();
+    } else {
+      const result = await scheduleRestAlert(restTimerSeconds, `Next: ${upcoming}`);
+      setAlertNote(result.ok ? null : `Couldn't schedule the alert: ${result.message}`);
+    }
   };
 
   const addThirty = async () => {
@@ -183,6 +208,35 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
     }
   };
 
+  // Keep the screen from locking during the workout: it keeps the countdown and the end-of-rest
+  // sound working while the page or app is in the foreground.
+  useEffect(() => {
+    const tag = "gymlock-workout";
+    activateKeepAwakeAsync(tag).catch(() => undefined);
+    return () => {
+      deactivateKeepAwake(tag).catch(() => undefined);
+    };
+  }, []);
+
+  // Tell someone whose notifications are off, instead of failing silently.
+  useEffect(() => {
+    getAlertPermission().then((permission) => {
+      if (permission === "denied") {
+        setAlertNote("Notifications are off, so you won't be alerted when the app is closed. Turn them on in your phone's Settings.");
+      }
+    });
+  }, []);
+
+  // On the web, show the countdown in the tab title so it is visible from the tab switcher.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const base = baseTitle.current || "GymLock";
+    document.title = isRunning ? `${formatClock(remaining)} rest · ${base}` : restOver ? `Rest over · ${base}` : base;
+    return () => {
+      document.title = base;
+    };
+  }, [isRunning, restOver, remaining]);
+
   const overall = progress.totalSets ? progress.doneSets / progress.totalSets : 0;
 
   return (
@@ -204,6 +258,7 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
           remaining={remaining}
           total={rest.total}
           nextUp={nextUp}
+          alertNote={alertNote}
           onAdd={addThirty}
           onSkip={skipRest}
         />
@@ -358,6 +413,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: "700",
+  },
+  alertNote: {
+    color: colors.orange,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  webHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
   },
   restButtons: {
     flexDirection: "row",

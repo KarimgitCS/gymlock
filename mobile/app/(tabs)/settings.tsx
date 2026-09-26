@@ -1,8 +1,9 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAccount } from "../../src/account/AccountContext";
+import { sendTestAlert } from "../../src/timers/restAlerts";
 
 import { Button } from "../../src/components/Button";
 import { TextField } from "../../src/components/TextField";
@@ -96,6 +97,39 @@ function AccountCard() {
   );
 }
 
+function AlertsCard() {
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <View style={[styles.card, styles.alertsCard]} testID="alerts-card">
+      <Text style={styles.cardTitle}>Rest alerts</Text>
+      <Text style={styles.cardSubtitle}>
+        {Platform.OS === "web"
+          ? "In a browser, the sound and vibration play when a rest ends while this page is open. Your screen stays on during a workout. Browsers can't alert you from a locked phone; the phone app can."
+          : "When a rest ends you get a notification, even with the app closed or the phone locked."}
+      </Text>
+      <View testID="test-alert">
+        <Button
+          title="Test alert"
+          variant="secondary"
+          loading={busy}
+          onPress={async () => {
+            setBusy(true);
+            setResult(await sendTestAlert());
+            setBusy(false);
+          }}
+        />
+      </View>
+      {result ? (
+        <Text style={result.ok ? styles.success : styles.error} testID="test-alert-result">
+          {result.message}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { restTimerSeconds, setRestTimerSeconds } = useSettings();
   const [restSeconds, setRestSeconds] = useState(String(restTimerSeconds));
@@ -147,6 +181,8 @@ export default function SettingsScreen() {
           <Button title="Save" onPress={onSave} />
         </View>
 
+        <AlertsCard />
+
         <View style={[styles.card, styles.noteCard]}>
           <Text style={styles.cardTitle}>Where your data lives</Text>
           <Text style={styles.cardSubtitle}>
@@ -183,6 +219,9 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.orange,
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  alertsCard: {
+    borderLeftColor: colors.mint,
   },
   accountCard: {
     borderLeftColor: colors.pink,

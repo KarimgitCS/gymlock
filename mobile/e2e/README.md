@@ -6,6 +6,7 @@ Playwright scripts that drive the web build in a real Chromium browser.
 |---|---|---|
 | `guest-flow.mjs` | plan a session, guided sets, rest timer that only starts on "Set done", reload persistence, summary | no |
 | `presets.mjs` | dropdown ranges, creating/editing/deleting presets | no |
+| `alerts.mjs` | rest alerts in the browser: sound and vibration fire when a rest ends, screen wake lock requested and released, tab-title countdown, Settings Test alert | no |
 | `sync.mjs` | two devices: sign-up uploads guest data, sign-in downloads it, deletes, last-write-wins, offline queueing, sign-out isolation, expired session | yes |
 
 ## Run them
@@ -25,6 +26,7 @@ npx serve -s dist -l 8082
 # Terminal 3
 node e2e/guest-flow.mjs
 node e2e/presets.mjs
+node e2e/alerts.mjs
 node e2e/sync.mjs
 ```
 
