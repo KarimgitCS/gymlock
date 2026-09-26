@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import { Text } from "react-native";
 
 import { BrandHeader } from "../../src/components/Logo";
+import { SyncBadge } from "../../src/components/SyncBadge";
 import { colors } from "../../src/theme";
 
 function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
@@ -13,6 +14,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerLeft: () => <BrandHeader />,
+        headerRight: () => <SyncBadge />,
         headerTitle: "",
         headerStyle: { backgroundColor: colors.background },
         headerShadowVisible: false,

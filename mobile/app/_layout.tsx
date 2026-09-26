@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
+import { AccountProvider } from "../src/account/AccountContext";
 import { Logo } from "../src/components/Logo";
 import { PresetsProvider } from "../src/presets/PresetsContext";
 import { SettingsProvider } from "../src/settings/SettingsContext";
@@ -9,6 +10,7 @@ import { WorkoutsProvider } from "../src/workouts/WorkoutsContext";
 
 export default function RootLayout() {
   return (
+    <AccountProvider>
     <SettingsProvider>
       <PresetsProvider>
       <WorkoutsProvider>
@@ -27,6 +29,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="start" options={{ headerShown: true, title: "Choose a session" }} />
               <Stack.Screen name="preset/[id]" options={{ headerShown: true, title: "Preset" }} />
+              <Stack.Screen name="account" options={{ headerShown: true, title: "Account" }} />
               <Stack.Screen
                 name="workout/[id]"
                 options={{
@@ -45,6 +48,7 @@ export default function RootLayout() {
       </WorkoutsProvider>
       </PresetsProvider>
     </SettingsProvider>
+    </AccountProvider>
   );
 }
 
