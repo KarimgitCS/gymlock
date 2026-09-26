@@ -1,204 +1,142 @@
 # GymLock
 
-A workout tracking mobile app — log workouts, track sets/reps/weights over time, view progress charts, and use a built-in rest timer between sets. Built as a portfolio project focused on a rock-solid, well-architected full-stack app (no ML/analytics layer — the differentiator here is clean architecture, not modeling).
+A workout tracker for the web and mobile: plan a session, then lift one set at a time with a rest timer, and watch your progress per exercise. Built as a portfolio project focused on clean architecture (no ML or analytics layer).
+
+**Live demo: [gymlock-web.onrender.com](https://gymlock-web.onrender.com)** — open it in any browser or on a phone. Nothing to install and no account needed.
+
+## Features
+
+- **Saved sessions (presets):** press Start workout, pick a saved session such as Push Day, and a workout opens pre-filled with its exercises, sets, reps and weight. Create, edit and delete your own presets. Three starters are included.
+- **Plan first, then lift:** set up the whole workout (exercises, sets, reps, weight, rest time), press Begin, and a guided mode walks through one set at a time.
+- **Rest timer that never starts by itself:** it starts only when you press **Set done**, and when it ends it waits for you. It is stored as an absolute end time, so it stays accurate through backgrounding and page reloads. On phones the end of the rest is scheduled as a local notification with the OS so it alerts you even if the app is closed; the web build uses an in-page timer with a beep.
+- **Dropdowns instead of typing:** sets 1–8, reps 1–16, weight 5–300 lb in 5 lb steps, rest 15–300 s.
+- **Progress charts:** max weight and volume over time for every exercise, drawn with hand-built SVG (no charting library).
+- **Local-first:** no login. Workouts, presets and settings are stored on the device (browser storage on the web, app storage on phones), so each device keeps its own data.
+
+Out of scope: an exercise library, accounts and sync, and any ML or analytics layer.
 
 ## Stack
 
-| Layer    | Tech                                              |
-|----------|----------------------------------------------------|
-| Mobile   | React Native via Expo                              |
-| Backend  | FastAPI (Python)                                   |
+| Layer | Tech |
+|---|---|
+| Client | React Native via Expo, exported as a website and a mobile app (TypeScript, Expo Router) |
+| Backend API | FastAPI (Python), SQLAlchemy, Alembic |
 | Database | PostgreSQL (Supabase in production, Docker locally) |
-| Auth     | JWT (password hashing + signed tokens)             |
-| Packaging | Docker (API image + local compose stack)          |
-| Dev tooling | Expo Go (live device preview during development) |
-
-## MVP feature set
-
-- No login: the app opens straight to your workouts, and everything is stored on the device (browser storage on the web, app storage on phones), so each device keeps its own data
-- Saved sessions (presets): tap Start workout, pick a saved session such as Push Day, and a new workout opens pre-filled with its exercises, sets, reps and weight. Create, edit and delete your own presets (three starters are included)
-- Log workouts made up of exercises, each with sets (weight × reps), chosen from scrolling dropdowns instead of typing: sets 1–8, reps 1–16, weight 5–300 lb in 5 lb steps
-- Basic progress charts (e.g. weight/volume over time per exercise)
-- Set up the whole workout first (exercises, sets, reps, weight, rest time), then press Begin: a guided mode walks through one set at a time
-- Rest timer that starts only when you press **Set done** (never automatically). It is stored as an absolute end time, so it stays accurate through backgrounding and reloads, and on phones the end of the rest is scheduled as a local notification with the OS so it alerts you even if the app is closed (the web build uses an in-page timer with a beep)
-- Configurable default rest timer, saved on the device
-- GymLock logo and a vivid, colorful dark theme
-
-Explicitly out of scope for the MVP: an exercise library/database, and any ML or analytics layer.
+| Auth (API) | JWT with hashed passwords |
+| Packaging | Docker (API image and a local compose stack) |
+| Hosting | Render (static site and Docker web service) |
 
 ## Project structure
 
 ```
 gymlock/
-  backend/     FastAPI + PostgreSQL API
-  mobile/      Expo (React Native) app
+  backend/          FastAPI + PostgreSQL API (Docker, Alembic migrations)
+  mobile/           Expo (React Native) app: the web and phone client
+  docker-compose.yml  local API + Postgres
 ```
 
-The two live in one repo but are independently runnable — the API has no dependency on the mobile app and could serve a web client later.
+The client stores its data locally and does not call the API. The API is a complete, deployed backend (accounts, workouts, exercises, sets, per-exercise history) that could back a synced client later.
 
-## Prerequisites
+## Run the app
 
-Install and confirm each of these before starting:
-
-- **Git** — `git --version`
-- **Python 3.11+** — `python3 --version`
-- **PostgreSQL** — `brew install postgresql@16` (Mac/Homebrew)
-- **Node.js 18+** — `node --version`
-- **Expo Go** — install on your phone from the App Store / Play Store (needed to preview the app live during development by scanning a QR code — no native build tooling required)
-
-## Setup
-
-### 1. Clone & scaffold
+Requires Node.js 22.13 or newer.
 
 ```bash
-git clone <this-repo-url> gymlock
-cd gymlock
-```
-
-### 2. Database
-
-```bash
-brew services start postgresql@16
-createdb gymlock_dev
-```
-
-Verify it worked:
-
-```bash
-psql gymlock_dev
-\q
-```
-
-### 3. Backend (`backend/`)
-
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-Create a `.env` file in `backend/` (see `.env.example`):
-
-```
-DATABASE_URL=postgresql://localhost/gymlock_dev
-JWT_SECRET=<generate a random secret>
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-```
-
-Apply migrations and run the API:
-
-```bash
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-The API will be live at `http://localhost:8000` (interactive docs at `/docs`).
-
-### 4. Mobile app (`mobile/`)
-
-```bash
-cd mobile
+git clone https://github.com/KarimgitCS/gymlock.git
+cd gymlock/mobile
 npm install
+npx expo start --web      # in the browser
+npx expo start            # or scan the QR code with Expo Go on a phone
 ```
 
-Point the app at your local API — set the base URL in your app config/env to your machine's LAN IP (not `localhost`, since your phone is a separate device on the network), e.g. `http://192.168.1.x:8000`.
+To try it on a phone, install Expo Go from the App Store or Play Store and scan the QR code that `npx expo start` prints.
 
-Start the dev server:
+## Run the backend
 
-```bash
-npx expo start
-```
-
-Scan the QR code with your phone's camera (iOS) or the Expo Go app (Android) to load the app live.
-
-## Data model
-
-| Table    | Key fields                                                       |
-|----------|--------------------------------------------------------------------|
-| User     | id, username, hashed_password, rest_timer_seconds, created_at     |
-| Workout  | id, user_id (FK), date, notes                                     |
-| Exercise | id, workout_id (FK), name, order                                  |
-| Set      | id, exercise_id (FK), weight, reps, set_number, completed_at       |
-
-## API surface (backend)
-
-- `POST /auth/signup` — create account (username + password)
-- `POST /auth/login` — returns JWT
-- `GET /auth/me` — current user's profile and settings
-- `PATCH /auth/me` — update settings (e.g. `rest_timer_seconds`)
-- `GET /workouts` — list current user's workouts
-- `POST /workouts` — create a workout
-- `POST /workouts/{id}/exercises` — add an exercise to a workout
-- `POST /exercises/{id}/sets` — log a set (weight, reps)
-- `GET /exercises/{id}/history` — historical sets for a single exercise instance
-- `GET /exercises/history?name=<name>` — sets for `<name>` across all of the user's workouts, for progress charts (exercises are scoped to one workout each, so this aggregates by name)
-
-All routes except signup/login require a valid JWT in the `Authorization` header (`Bearer <token>`).
-
-## Mobile app structure
-
-- **Local storage** — workouts, exercises, sets and settings are saved on the device via AsyncStorage (`mobile/src/storage`, `WorkoutsContext`, `SettingsContext`); there is no login
-- **Start / presets** — Start workout opens the saved sessions (`app/start.tsx`); presets are created and edited in `app/preset/[id].tsx` and stored on the device (`src/presets`)
-- **Workout screen** (`app/workout/[id].tsx`) — a workout moves through three stages: **planned** (`src/workout/WorkoutSetup.tsx`: edit every exercise's sets/reps/weight and the rest time, nothing runs), **active** (`ActiveWorkout.tsx`: one set at a time with a big Set done button, then the rest countdown with +30 s / Skip rest), and **done** (`WorkoutSummary.tsx`). Home shows a Resume card while a workout is planned or active. Values come from dropdowns (`src/components/NumberPicker.tsx`, ranges in `src/constants.ts`)
-- **Rest timer** — `src/hooks/useRestTimer.ts` counts down to a stored end timestamp (reconciled with `AppState` on foreground); `src/timers/restAlerts.ts` schedules the end-of-rest local notification on phones (`expo-notifications`) and plays a beep on the web
-- **Progress screen** — charts of weight/volume per exercise over time
-
-## Running with Docker (local)
-
-The API and a Postgres database run in containers, so nothing needs installing besides Docker:
+With Docker, nothing else needs installing:
 
 ```bash
 docker compose up --build      # API on http://localhost:8000, Postgres on localhost:5433
 docker compose down -v         # stop and wipe the local database
 ```
 
-`backend/Dockerfile` is the same image used in production. It runs `alembic upgrade head` on start, then serves the API with uvicorn on `$PORT`. Dependencies in `backend/requirements.txt` are pinned to tested versions.
+Or without Docker (requires Python 3.11+ and PostgreSQL):
+
+```bash
+createdb gymlock_dev
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cat > .env <<EOF
+DATABASE_URL=postgresql://localhost/gymlock_dev
+JWT_SECRET=$(openssl rand -hex 32)
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+EOF
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+The API is then live at `http://localhost:8000`, with interactive docs at `/docs`.
+
+`backend/Dockerfile` is the image used in production. It runs `alembic upgrade head` on start, then serves the API with uvicorn on `$PORT`. Dependencies in `backend/requirements.txt` are pinned to tested versions.
+
+## Data model (API database)
+
+| Table | Key fields |
+|---|---|
+| users | id, username, hashed_password, rest_timer_seconds, created_at |
+| workouts | id, user_id (FK), date, notes |
+| exercises | id, workout_id (FK), name, order |
+| sets | id, exercise_id (FK), weight, reps, set_number, completed_at |
+
+The client keeps the same shape locally, extended with a workout status (planned, active, done), each exercise's plan and the stored rest end time.
+
+## API
+
+- `POST /auth/signup` — create an account (username and password)
+- `POST /auth/login` — returns a JWT
+- `GET /auth/me`, `PATCH /auth/me` — profile and settings such as `rest_timer_seconds`
+- `GET /workouts`, `POST /workouts` — list or create the current user's workouts
+- `POST /workouts/{id}/exercises` — add an exercise to a workout
+- `POST /exercises/{id}/sets` — log a set (weight, reps)
+- `GET /exercises/{id}/history` — sets for one exercise instance
+- `GET /exercises/history?name=Bench%20Press` — sets for an exercise name across all of the user's workouts, for progress charts
+- `GET /health` — liveness check
+
+Every route except signup, login and health requires an `Authorization: Bearer` header carrying the JWT.
+
+## How the client is organized
+
+- **Storage:** `mobile/src/storage`, `WorkoutsContext`, `PresetsContext` and `SettingsContext` persist everything with AsyncStorage.
+- **Start and presets:** Start workout opens the saved sessions (`app/start.tsx`); presets are edited in `app/preset/[id].tsx`.
+- **Workout screen** (`app/workout/[id].tsx`): a workout moves through three stages. **Planned** (`src/workout/WorkoutSetup.tsx`) edits every exercise's plan and the rest time while nothing runs. **Active** (`ActiveWorkout.tsx`) shows one set at a time with a Set done button, then the rest countdown with +30 s and Skip rest. **Done** (`WorkoutSummary.tsx`) shows the totals. Home shows a Resume card while a workout is planned or active.
+- **Rest timer:** `src/hooks/useRestTimer.ts` counts down to a stored end timestamp and re-syncs with `AppState` when the app returns to the foreground; `src/timers/restAlerts.ts` schedules the end-of-rest notification on phones (`expo-notifications`) and plays a beep on the web.
+- **Pickers:** `src/components/NumberPicker.tsx` is the scrolling dropdown; the ranges live in `src/constants.ts`.
+- **Progress:** `app/(tabs)/progress.tsx` and `src/components/LineChart.tsx` chart weight and volume per exercise over time.
 
 ## Deployment
-
-**The app itself is local-first and no longer calls the API.** The FastAPI backend and Supabase database below remain in the repo and deployed, but nothing in the mobile/web client uses them right now.
 
 Everything runs on free tiers with no expiring trial:
 
 | Piece | Where | Notes |
 |---|---|---|
-| Website | Render **Static Site** `gymlock-web` | Built from `mobile/` with `npx expo export --platform web`; live at `https://gymlock-web.onrender.com`. Data lives in each visitor's browser storage |
-| API | Render **Web Service** `gymlock-api` (Docker runtime, `backend/Dockerfile`) | Live at `https://gymlock-api.onrender.com` (docs at `/docs`); auto-deploys on push to `main` |
-| Database | **Supabase** Postgres (free plan) | Reached through Supabase's IPv4 session pooler (Render's free tier has no IPv6) |
+| Website | Render Static Site `gymlock-web` | Built from `mobile/` with `npx expo export --platform web`; live at [gymlock-web.onrender.com](https://gymlock-web.onrender.com) |
+| API | Render Web Service `gymlock-api` (Docker runtime, `backend/Dockerfile`) | Live at [gymlock-api.onrender.com](https://gymlock-api.onrender.com), docs at `/docs` |
+| Database | Supabase Postgres (free plan) | Reached through Supabase's IPv4 session pooler, because Render's free tier has no IPv6 |
 
-- **Website:** the same Expo codebase as the mobile app. The auth token is kept in `localStorage` on web and SecureStore on native (`mobile/src/auth/tokenStorage.ts`). Static sites don't rewrite unknown paths, so the build copies `index.html` to `404.html`: deep links like `/progress` render, but with an HTTP 404 status. A `/*` → `/index.html` rewrite rule in the Render dashboard makes them return 200.
-- **Database:** `DATABASE_URL` is the Supabase pooler connection string (`postgresql://postgres.<ref>:<password>@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require`). Row level security is enabled on every table (migration `9c1e4b7a2d10`) so Supabase's auto-generated REST API can't expose them; the API connects as the table owner, which bypasses RLS.
-- **API environment:** `DATABASE_URL`, `JWT_SECRET`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
-- **Free-tier behavior:** the Render web service spins down when idle, so the first request after a quiet period is slow. Supabase pauses free projects after about a week of inactivity and they can be resumed from the dashboard.
+- The website and the API auto-deploy on every push to `main`.
+- **Database:** `DATABASE_URL` is the session-pooler connection string from the Supabase project's database settings. Row level security is enabled on every table (migration `9c1e4b7a2d10`) so Supabase's auto-generated REST API cannot expose them; the API connects as the table owner, which bypasses it.
+- **API environment variables:** `DATABASE_URL`, `JWT_SECRET`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
+- **Deep links on the website:** static sites don't rewrite unknown paths, so the build copies `index.html` to `404.html`. Links like `/progress` render correctly but are served with an HTTP 404 status. A `/*` to `/index.html` rewrite rule in the Render dashboard makes them return 200.
+- **Free-tier behavior:** the Render API spins down when idle, so its first request after a quiet period is slow. Supabase pauses free projects after about a week of inactivity; they can be resumed from its dashboard.
 
-To point the mobile app at the deployed API instead of a local backend, set in `mobile/.env`:
+## Installing on an iPhone
 
-```
-EXPO_PUBLIC_API_URL=https://gymlock-api.onrender.com
-```
+For development, use Expo Go (see Run the app). To install it as a standalone app icon, Apple offers two free routes:
 
-## Getting it on your iPhone
+1. **Xcode with a free Apple ID:** build locally with `npx expo run:ios` and install through Xcode. The install expires after 7 days and needs reconnecting to a Mac to refresh.
+2. **SideStore:** a one-time setup from a computer, after which it refreshes automatically over Wi-Fi.
 
-**During development:** use Expo Go (see step 4 above) — free, instant, no restrictions, this is how you'll preview the app as you build it.
-
-**As a standalone installed app icon (no dev server needed):** Apple doesn't allow a free, permanent install outside the App Store, but there are two free routes:
-
-1. **Xcode + free Apple ID** — build locally (`npx expo run:ios`) and install via Xcode using your regular Apple ID at no cost. The install expires after 7 days and needs reconnecting to your Mac to refresh — reasonable while still actively developing.
-2. **SideStore** — one-time setup from a computer, then refreshes automatically over Wi-Fi with no computer needed afterward. More setup effort, but closest to a "just works" free daily-use install. Best done once the app is stable.
-
-Apple's paid Developer Program ($99/year) removes the 7-day limit entirely, but isn't required for either option above.
-
-## Roadmap
-
-1. Project setup & tooling
-2. Backend: models & database
-3. Backend: JWT auth
-4. Backend: workout logging endpoints
-5. Mobile: scaffold Expo app
-6. Mobile: auth screens
-7. Mobile: workout logging screens
-8. Mobile: rest timer
-9. Mobile: progress charts
-10. Polish, test, push to GitHub, and install on-device
+Apple's paid Developer Program ($99/year) removes the 7-day limit but isn't required for either route.
