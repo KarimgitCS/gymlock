@@ -129,7 +129,7 @@ Everything runs on free tiers with no expiring trial:
 - The website and the API auto-deploy on every push to `main`.
 - **Database:** `DATABASE_URL` is the session-pooler connection string from the Supabase project's database settings. Row level security is enabled on every table (migration `9c1e4b7a2d10`) so Supabase's auto-generated REST API cannot expose them; the API connects as the table owner, which bypasses it.
 - **API environment variables:** `DATABASE_URL`, `JWT_SECRET`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
-- **Deep links on the website:** static sites don't rewrite unknown paths, so the build copies `index.html` to `404.html`. Links like `/progress` render correctly but are served with an HTTP 404 status. A `/*` to `/index.html` rewrite rule in the Render dashboard makes them return 200.
+- **Deep links on the website:** a `/*` to `/index.html` rewrite rule (Render dashboard, Redirects/Rewrites) serves the app for any path, so links like `/progress` work and return 200. Real files such as the JavaScript bundle are still served as-is.
 - **Free-tier behavior:** the Render API spins down when idle, so its first request after a quiet period is slow. Supabase pauses free projects after about a week of inactivity; they can be resumed from its dashboard.
 
 ## Installing on an iPhone
