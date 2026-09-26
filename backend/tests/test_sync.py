@@ -123,9 +123,23 @@ def test_a_delete_older_than_the_servers_copy_is_ignored(client, alice):
     assert len(client.get("/workouts", headers=alice).json()) == 1
 
 
-def test_deleting_something_the_server_never_saw_is_ignored(client, alice):
-    reply = sync(client, alice, deleted_workouts=[{"id": new_id(), "updated_at": 1}])
-    assert reply["deleted_workouts"] == []
+def test_a_delete_for_something_the_server_never_saw_is_still_recorded(client, alice):
+    unseen = new_id()
+    reply = sync(client, alice, deleted_workouts=[{"id": unseen, "updated_at": 500}])
+    assert reply["deleted_workouts"] == [{"id": unseen, "updated_at": 500}]
+    assert client.get("/workouts", headers=alice).json() == []
+
+    # A copy edited before that delete must not bring it back; one edited after it may.
+    sync(client, alice, workouts=[make_workout(id=unseen, updated_at=100)])
+    assert client.get("/workouts", headers=alice).json() == []
+    sync(client, alice, workouts=[make_workout(id=unseen, updated_at=900)])
+    assert len(client.get("/workouts", headers=alice).json()) == 1
+
+
+def test_a_deleted_preset_the_server_never_saw_reaches_other_devices(client, alice):
+    starter = new_id()
+    sync(client, alice, deleted_presets=[{"id": starter, "updated_at": 500}])
+    assert sync(client, alice)["deleted_presets"] == [{"id": starter, "updated_at": 500}]
 
 
 def test_a_workout_can_be_recreated_after_deletion_with_a_newer_edit(client, alice):

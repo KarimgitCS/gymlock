@@ -110,8 +110,18 @@ def _tombstone(db: Session, user: User, model: type[Workout] | type[Preset], dat
         .filter(model.user_id == user.id, model.client_id == data.id)
         .first()
     )
-    # Unknown rows were never synced, so there is nothing to tell other devices about.
-    if row is None or row.updated_at > data.updated_at:
+    if row is None:
+        # Never synced from this device, but other devices may hold their own copy (starter
+        # presets share ids), so record the delete for them to pick up.
+        row = model(user_id=user.id, client_id=data.id, updated_at=data.updated_at, deleted=True, synced_at=_now())
+        if model is Workout:
+            row.date = dt.date.today()
+            row.status = "done"
+        else:
+            row.name = ""
+        db.add(row)
+        return
+    if row.updated_at > data.updated_at:
         return
     child = Exercise if model is Workout else PresetExercise
     fk = child.workout_id if model is Workout else child.preset_id
