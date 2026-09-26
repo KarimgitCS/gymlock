@@ -232,7 +232,7 @@ def test_token_is_refreshed_only_when_it_is_getting_old(client, alice):
 
 def test_exercise_history_spans_workouts_and_ignores_other_users_and_deleted_workouts(client, alice, bob):
     def bench(weight, when):
-        w = make_workout()
+        w = make_workout(status="done", finished_at=when)
         w["exercises"][0]["name"] = "bench press"
         w["exercises"][0]["sets"][0].update(weight=weight, completed_at=when)
         return w
@@ -246,6 +246,18 @@ def test_exercise_history_spans_workouts_and_ignores_other_users_and_deleted_wor
     history = client.get("/exercises/history", params={"name": "Bench Press"}, headers=alice).json()
     assert [s["weight"] for s in history] == [100.0, 110.0]
     assert client.get("/exercises/history", params={"name": "Squat"}, headers=alice).json() == []
+
+
+def test_exercise_history_only_counts_finished_workouts(client, alice):
+    def bench(weight, status):
+        w = make_workout(status=status)
+        w["exercises"][0]["sets"][0].update(weight=weight)
+        return w
+
+    sync(client, alice, workouts=[bench(100, "done"), bench(500, "active"), bench(600, "planned")])
+
+    history = client.get("/exercises/history", params={"name": "Bench Press"}, headers=alice).json()
+    assert [s["weight"] for s in history] == [100.0]
 
 
 def test_two_devices_converge(client, alice):

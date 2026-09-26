@@ -248,7 +248,11 @@ def collect_changes(db: Session, user: User, since: dt.datetime | None) -> schem
 
 
 def history_for_exercise(db: Session, user: User, name: str) -> list[Set]:
-    """Every logged set of an exercise name across the user's workouts, oldest first."""
+    """Every logged set of an exercise name across the user's finished workouts, oldest first.
+
+    Deleted workouts and ones still being set up or in progress do not count, so removing a
+    half-done session from the log keeps it out of the progress charts.
+    """
     return (
         db.query(Set)
         .join(Exercise, Set.exercise_id == Exercise.id)
@@ -256,6 +260,7 @@ def history_for_exercise(db: Session, user: User, name: str) -> list[Set]:
         .filter(
             Workout.user_id == user.id,
             Workout.deleted.is_(False),
+            Workout.status == "done",
             func.lower(Exercise.name) == name.strip().lower(),
         )
         .order_by(Set.completed_at.asc())
