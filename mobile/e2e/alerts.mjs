@@ -1,5 +1,6 @@
-// Rest alerts in the browser: the sound and vibration fire when a rest ends, the screen is kept
-// awake during a workout, the tab title shows the countdown, and the Settings "Test alert" works.
+// Rest alerts in the browser: when a rest ends an alarm keeps sounding and vibrating until the user
+// acknowledges it, the screen is kept awake during a workout, the tab title shows the countdown,
+// and the Settings test buttons work.
 // Run: SITE=http://localhost:8082 node e2e/alerts.mjs   (see e2e/README.md)
 import fs from "node:fs";
 import { chromium } from "playwright";
@@ -46,7 +47,7 @@ await step("Settings explains web alerts and Test alert plays a sound and vibrat
   await page.goto(SITE + "/settings");
   await tid("alerts-card").waitFor({ timeout: 30000 });
   const before = await spy();
-  await tid("test-alert").getByText("Test alert").click();
+  await tid("test-alert").getByText("Test notification").click();
   await tid("test-alert-result").waitFor();
   const after = await spy();
   if (after.plays.length <= before.plays.length) throw new Error("no sound was played");
@@ -69,25 +70,64 @@ await step("during a workout: screen kept awake, countdown in the tab title, pag
   await page.screenshot({ path: `${SHOTS}/alerts-resting.png` });
 });
 
-await step("when the rest ends the sound plays, the phone vibrates, and the title resets", async () => {
+const audible = async () => (await spy()).plays.filter((p) => p.muted === false).length;
+
+await step("when the rest ends an alarm sounds and keeps repeating until stopped", async () => {
   const before = await spy();
-  await tid("rest-over").waitFor({ timeout: 40000 });
+  await tid("stop-alarm").waitFor({ timeout: 40000 });
+  const start = await audible();
+  await page.waitForTimeout(4500);
+  const during = await audible();
+  if (during - start < 2) throw new Error(`alarm did not repeat: ${during - start} more plays in 4.5s`);
+  if ((await spy()).vibrations <= before.vibrations + 1) throw new Error("vibration did not repeat");
+  await page.screenshot({ path: `${SHOTS}/alerts-alarm.png` });
+});
+
+await step("Stop alarm silences it", async () => {
+  await tid("stop-alarm").click();
+  await tid("rest-over").waitFor();
+  const stopped = await audible();
+  await page.waitForTimeout(3500);
+  if ((await audible()) !== stopped) throw new Error("the alarm kept playing after Stop alarm");
+});
+
+await step("pressing Set done also silences a sounding alarm", async () => {
+  await page.getByText("Set done", { exact: true }).click();
+  await tid("rest-panel").waitFor();
+  await tid("stop-alarm").waitFor({ timeout: 40000 });
+  await page.getByText("Set done", { exact: true }).click();
   await page.waitForTimeout(400);
-  const after = await spy();
-  const newPlays = after.plays.slice(before.plays.length);
-  if (!newPlays.some((p) => p.muted === false)) throw new Error("no audible play when the rest ended");
-  if (after.vibrations <= before.vibrations) throw new Error("no vibration when the rest ended");
-  const title = await page.title();
-  if (/rest/i.test(title) && !/over/i.test(title)) throw new Error("title stuck on the countdown: " + title);
+  const stopped = await audible();
+  await page.waitForTimeout(3500);
+  if ((await audible()) !== stopped) throw new Error("the alarm kept playing after Set done");
+  if (await page.getByTestId("stop-alarm").count()) throw new Error("stop banner still showing");
+});
+
+await step("Settings Test alarm plays for a few seconds and then stops by itself", async () => {
+  await page.goto(SITE + "/settings");
+  await tid("alerts-card").waitFor();
+  const before = await audible();
+  await tid("test-alarm").getByText("Test alarm").click();
+  await page.waitForTimeout(3500);
+  const during = await audible();
+  if (during - before < 1) throw new Error("test alarm made no sound");
+  await page.waitForTimeout(4500);
+  const after = await audible();
+  await page.waitForTimeout(3000);
+  if ((await audible()) !== after) throw new Error("test alarm never stopped");
 });
 
 await step("the screen lock is released when the workout ends", async () => {
+  await page.goto(SITE);
+  await tid("resume-workout").click();
+  await page.getByText("Now").waitFor();
+  const releasedBefore = (await spy()).wake.released;
   await tid("end-workout").click();
   await page.getByText("Tap again to end the workout").waitFor();
   await tid("end-workout").click();
   await page.getByText("Workout complete").waitFor();
   await page.waitForTimeout(300);
-  if ((await spy()).wake.released < 1) throw new Error("wake lock never released");
+  if ((await spy()).wake.released <= releasedBefore) throw new Error("wake lock never released");
 });
 
 console.log("browser errors:", errors.length ? errors : "none");

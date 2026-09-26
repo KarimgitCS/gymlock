@@ -3,7 +3,8 @@
 
 const SAMPLE_RATE = 22050;
 
-export function buildBeepWav(): Uint8Array {
+// `tailSilenceSeconds` pads the end so a looped file has a pause before it repeats.
+export function buildBeepWav(tailSilenceSeconds = 0): Uint8Array {
   const beepSeconds = 0.18;
   const gapSeconds = 0.1;
   const frequency = 880;
@@ -11,7 +12,8 @@ export function buildBeepWav(): Uint8Array {
 
   const beepSamples = Math.round(beepSeconds * SAMPLE_RATE);
   const gapSamples = Math.round(gapSeconds * SAMPLE_RATE);
-  const total = beeps * beepSamples + (beeps - 1) * gapSamples;
+  const tailSamples = Math.round(tailSilenceSeconds * SAMPLE_RATE);
+  const total = beeps * beepSamples + (beeps - 1) * gapSamples + tailSamples;
   const dataBytes = total * 2;
 
   const buffer = new ArrayBuffer(44 + dataBytes);

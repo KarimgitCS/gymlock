@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAccount } from "../../src/account/AccountContext";
-import { sendTestAlert } from "../../src/timers/restAlerts";
+import { startRestAlarm, stopRestAlarm } from "../../src/timers/restAlarm";
+import { primeAudio, sendTestAlert } from "../../src/timers/restAlerts";
 
 import { Button } from "../../src/components/Button";
 import { TextField } from "../../src/components/TextField";
@@ -107,19 +108,37 @@ function AlertsCard() {
       <Text style={styles.cardSubtitle}>
         {Platform.OS === "web"
           ? "In a browser, the sound and vibration play when a rest ends while this page is open. Your screen stays on during a workout. Browsers can't alert you from a locked phone; the phone app can."
-          : "When a rest ends you get a notification, even with the app closed or the phone locked."}
+          : "When a rest ends with the app open, an alarm sounds and pulses until you tap Set done or Stop alarm. With the app closed or the phone locked, you get a notification that repeats every few seconds until you open the app. The silent switch mutes notification sounds, so keep the phone on ring."}
       </Text>
-      <View testID="test-alert">
-        <Button
-          title="Test alert"
-          variant="secondary"
-          loading={busy}
-          onPress={async () => {
-            setBusy(true);
-            setResult(await sendTestAlert());
-            setBusy(false);
-          }}
-        />
+      <View style={styles.accountButtons}>
+        <View style={{ flex: 1 }} testID="test-alert">
+          <Button
+            title="Test notification"
+            variant="secondary"
+            loading={busy}
+            onPress={async () => {
+              setBusy(true);
+              setResult(await sendTestAlert());
+              setBusy(false);
+            }}
+          />
+        </View>
+        <View style={{ flex: 1 }} testID="test-alarm">
+          <Button
+            title="Test alarm"
+            variant="secondary"
+            onPress={() => {
+              primeAudio();
+              startRestAlarm();
+              setTimeout(stopRestAlarm, 5000);
+              setResult({
+                ok: true,
+                message:
+                  "Alarm playing for 5 seconds: a looping beep (even with the silent switch on) and strong pulses. This is what you get when a rest ends while the app is open.",
+              });
+            }}
+          />
+        </View>
       </View>
       {result ? (
         <Text style={result.ok ? styles.success : styles.error} testID="test-alert-result">

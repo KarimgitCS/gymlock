@@ -65,7 +65,7 @@ await step("rest survives a reload (kept on the device by timestamp)", async () 
   if (after > before || after < before - 4) throw new Error("clock reset or jumped: " + before + " -> " + after);
 });
 await step("when rest ends nothing auto-starts; waits for Set done", async () => {
-  await tid("rest-over").waitFor({ timeout: 60000 });
+  await page.locator('[data-testid="rest-over"], [data-testid="stop-alarm"]').last().waitFor({ timeout: 60000 });
   if (await has("rest-panel")) throw new Error("rest panel still shown");
   await page.getByText("Set 2 of 2").first().waitFor();
   await page.waitForTimeout(2500);

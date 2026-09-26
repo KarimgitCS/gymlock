@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
 import { NumberPicker } from "../components/NumberPicker";
@@ -10,11 +10,13 @@ import { useRestTimer } from "../hooks/useRestTimer";
 import { useSettings } from "../settings/SettingsContext";
 import {
   cancelRestAlert,
+  dismissRestNotifications,
   getAlertPermission,
-  playRestEndCue,
   primeAudio,
   scheduleRestAlert,
 } from "../timers/restAlerts";
+import { isRestAlarmActive, startRestAlarm, stopRestAlarm, subscribeRestAlarm } from "../timers/restAlarm";
+import { restIsOver } from "../timers/schedule";
 import { accentFor, colors, radius, spacing } from "../theme";
 import type { Exercise, Workout } from "../types";
 import { describeNextAfterSet, describeTarget, getWorkoutProgress } from "../utils/workoutProgress";
@@ -31,11 +33,15 @@ function SetPanel({
   exercise,
   setNumber,
   restOver,
+  alarmOn,
+  onStopAlarm,
   onDone,
 }: {
   exercise: Exercise;
   setNumber: number;
   restOver: boolean;
+  alarmOn: boolean;
+  onStopAlarm: () => void;
   onDone: (weight: number, reps: number) => Promise<void>;
 }) {
   const plan = exercise.plan!;
@@ -57,7 +63,16 @@ function SetPanel({
 
   return (
     <View style={[styles.panel, { borderTopColor: accent }]}>
-      {restOver ? (
+      {alarmOn ? (
+        <Pressable
+          style={[styles.restOverBanner, styles.alarmBanner]}
+          testID="stop-alarm"
+          accessibilityRole="button"
+          onPress={onStopAlarm}
+        >
+          <Text style={styles.restOverText}>Rest over! Tap to stop the alarm</Text>
+        </Pressable>
+      ) : restOver ? (
         <View style={styles.restOverBanner} testID="rest-over">
           <Text style={styles.restOverText}>Rest over — you're up</Text>
         </View>
@@ -161,8 +176,11 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
 
   const progress = getWorkoutProgress(workout);
   const rest = workout.rest ?? null;
-  const { remaining, isRunning } = useRestTimer(rest?.ends_at ?? null, playRestEndCue);
+  const { remaining, isRunning } = useRestTimer(rest?.ends_at ?? null, startRestAlarm);
   const restOver = rest !== null && !isRunning;
+  const [alarmOn, setAlarmOn] = useState(isRestAlarmActive());
+  const restEndsAtRef = useRef<number | null>(rest?.ends_at ?? null);
+  restEndsAtRef.current = rest?.ends_at ?? null;
   const current = progress.current;
   const nextUp = current?.plan
     ? describeTarget(
@@ -175,6 +193,7 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
 
   const onSetDone = async (weight: number, reps: number) => {
     if (!current) return;
+    stopRestAlarm();
     primeAudio();
     const upcoming = describeNextAfterSet(workout, current.id);
     const { finished } = await completeSet(workout.id, current.id, weight, reps, restTimerSeconds);
@@ -188,16 +207,19 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
 
   const addThirty = async () => {
     if (!rest) return;
+    stopRestAlarm();
     await setRest(workout.id, { ends_at: rest.ends_at + 30000, total: rest.total + 30 });
     if (nextUp) await scheduleRestAlert(remaining + 30, `Next: ${nextUp}`);
   };
 
   const skipRest = async () => {
+    stopRestAlarm();
     await cancelRestAlert();
     await setRest(workout.id, null);
   };
 
   const endEarly = async () => {
+    stopRestAlarm();
     if (!confirmEnd) return setConfirmEnd(true);
     await cancelRestAlert();
     if (progress.doneSets === 0) {
@@ -207,6 +229,27 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
       await finishWorkout(workout.id);
     }
   };
+
+  useEffect(() => {
+    const unsubscribe = subscribeRestAlarm(() => setAlarmOn(isRestAlarmActive()));
+    return () => {
+      unsubscribe();
+      stopRestAlarm();
+    };
+  }, []);
+
+  // Leaving the app silences the in-app alarm (the notifications take over). Coming back after the
+  // rest ended clears the reminders that piled up and stops the ones still queued.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background") stopRestAlarm();
+      if (state === "active" && restIsOver(restEndsAtRef.current)) {
+        void cancelRestAlert();
+        void dismissRestNotifications();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Keep the screen from locking during the workout: it keeps the countdown and the end-of-rest
   // sound working while the page or app is in the foreground.
@@ -223,6 +266,8 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
     getAlertPermission().then((permission) => {
       if (permission === "denied") {
         setAlertNote("Notifications are off, so you won't be alerted when the app is closed. Turn them on in your phone's Settings.");
+      } else if (permission === "unavailable" && Platform.OS !== "web") {
+        setAlertNote("Notifications could not be set up here, so you won't be alerted when the app is closed.");
       }
     });
   }, []);
@@ -268,6 +313,8 @@ export function ActiveWorkout({ workout }: { workout: Workout }) {
           exercise={current}
           setNumber={progress.setNumber}
           restOver={restOver}
+          alarmOn={alarmOn}
+          onStopAlarm={stopRestAlarm}
           onDone={onSetDone}
         />
       ) : null}
@@ -353,6 +400,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     paddingVertical: 6,
     alignItems: "center",
+  },
+  alarmBanner: {
+    backgroundColor: colors.pink,
   },
   restOverText: {
     color: colors.background,

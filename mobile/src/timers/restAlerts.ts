@@ -2,9 +2,11 @@ import { Platform, Vibration } from "react-native";
 import type * as NotificationsType from "expo-notifications";
 
 import { buildBeepWav } from "./beep";
+import { alertOffsets } from "./schedule";
 
-// Phones (Expo): the end of the rest is scheduled as a local notification with the OS, so it
-// fires even when the app is in the background or the screen is locked.
+// Phones (Expo): the end of the rest is scheduled as a burst of local notifications with the OS
+// (one when the rest ends, then a reminder every few seconds), so it fires even when the app is in
+// the background or the phone is locked, and keeps nagging until the user comes back.
 //
 // Web: a browser page cannot schedule anything once it is backgrounded or the phone is locked,
 // so the page instead keeps the screen awake during a workout and plays a sound and vibrates when
@@ -17,7 +19,7 @@ export interface AlertResult {
 }
 
 const CHANNEL_ID = "rest-timer";
-let scheduledId: string | null = null;
+let scheduledIds: string[] = [];
 let configured = false;
 
 function notifications(): typeof NotificationsType | null {
@@ -50,13 +52,19 @@ async function configure(N: typeof NotificationsType) {
   }
 }
 
+// Logs go to the Metro terminal in development, which is how alert problems get diagnosed.
+const log = (...args: unknown[]) => console.log("[alerts]", ...args);
+
 export async function getAlertPermission(): Promise<AlertPermission> {
   const N = notifications();
   if (!N) return "unavailable";
   try {
     await configure(N);
-    return (await N.getPermissionsAsync()).status === "granted" ? "granted" : "denied";
-  } catch {
+    const permissions = await N.getPermissionsAsync();
+    log("permission:", permissions.status, JSON.stringify(permissions.ios ?? {}));
+    return permissions.status === "granted" ? "granted" : "denied";
+  } catch (error) {
+    log("permission check failed:", describe(error));
     return "unavailable";
   }
 }
@@ -68,22 +76,38 @@ export async function requestAlertPermission(): Promise<AlertPermission> {
   try {
     await configure(N);
     const current = await N.getPermissionsAsync();
+    log("permission before asking:", current.status, JSON.stringify(current.ios ?? {}));
     if (current.status === "granted") return "granted";
-    return (await N.requestPermissionsAsync()).status === "granted" ? "granted" : "denied";
-  } catch {
+    const asked = await N.requestPermissionsAsync();
+    log("permission after asking:", asked.status, JSON.stringify(asked.ios ?? {}));
+    return asked.status === "granted" ? "granted" : "denied";
+  } catch (error) {
+    log("asking for permission failed:", describe(error));
     return "unavailable";
   }
 }
 
 export async function cancelRestAlert(): Promise<void> {
   const N = notifications();
-  if (!N || !scheduledId) return;
-  const id = scheduledId;
-  scheduledId = null;
+  if (!N || scheduledIds.length === 0) return;
+  const ids = scheduledIds;
+  scheduledIds = [];
+  log(`cancelling ${ids.length} pending alert(s)`);
+  await Promise.all(
+    ids.map((id) =>
+      N.cancelScheduledNotificationAsync(id).catch(() => undefined) // already fired or cleared
+    )
+  );
+}
+
+// Clears reminders that already arrived (they stack up on the lock screen) once the user is back.
+export async function dismissRestNotifications(): Promise<void> {
+  const N = notifications();
+  if (!N) return;
   try {
-    await N.cancelScheduledNotificationAsync(id);
+    await N.dismissAllNotificationsAsync();
   } catch {
-    // Already fired or cleared.
+    // Nothing to clear.
   }
 }
 
@@ -94,17 +118,30 @@ export async function scheduleRestAlert(seconds: number, body: string): Promise<
   if (seconds <= 0) return { ok: true, message: "Nothing to schedule." };
   try {
     await configure(N);
-    scheduledId = await N.scheduleNotificationAsync({
-      content: { title: "Rest over", body, sound: true },
-      trigger: {
-        type: N.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.max(1, Math.round(seconds)),
-        channelId: CHANNEL_ID,
-      },
-    });
+    const ids: string[] = [];
+    for (const [index, offset] of alertOffsets(seconds).entries()) {
+      ids.push(
+        await N.scheduleNotificationAsync({
+          content: {
+            title: index === 0 ? "Rest over" : "Rest over, still waiting",
+            body: index === 0 ? body : `Tap to get back to your workout. ${body}`,
+            sound: true,
+          },
+          trigger: {
+            type: N.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: offset,
+            channelId: CHANNEL_ID,
+          },
+        })
+      );
+    }
+    scheduledIds = ids;
+    const pending = await N.getAllScheduledNotificationsAsync();
+    log(`scheduled ${ids.length} alerts starting in ${Math.round(seconds)}s; ${pending.length} pending on the device`);
     return { ok: true, message: "Alert scheduled." };
   } catch (error) {
-    scheduledId = null;
+    await cancelRestAlert();
+    log("scheduling failed:", describe(error));
     return { ok: false, message: describe(error) };
   }
 }
@@ -181,7 +218,16 @@ export async function sendTestAlert(): Promise<AlertResult> {
     return { ok: false, message: "Notifications are not available in this environment." };
   }
   const result = await scheduleRestAlert(5, "This is a test alert. Your rest timer alerts will look like this.");
-  return result.ok
-    ? { ok: true, message: "Scheduled. Lock your phone or switch to another app now; the alert should arrive in about 5 seconds." }
-    : { ok: false, message: `Could not schedule the alert: ${result.message}` };
+  if (!result.ok) return { ok: false, message: `Could not schedule the alert: ${result.message}` };
+  let queued = "";
+  try {
+    const pending = (await notifications()!.getAllScheduledNotificationsAsync()).length;
+    queued = ` (${pending} waiting on this phone)`;
+  } catch {
+    // Diagnostic only.
+  }
+  return {
+    ok: true,
+    message: `Scheduled${queued}. Lock your phone or switch to another app now; the alert should arrive in about 5 seconds and then repeat every few seconds for about a minute, until you open the app. If nothing arrives, check that notifications are on for Expo Go in your phone's Settings, and that Focus / Do Not Disturb is off.`,
+  };
 }
