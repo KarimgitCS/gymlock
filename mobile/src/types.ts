@@ -1,6 +1,6 @@
 export interface Set {
-  id: number;
-  exercise_id: number;
+  id: string;
+  exercise_id: string;
   weight: number;
   reps: number;
   set_number: number;
@@ -14,8 +14,8 @@ export interface ExercisePlan {
 }
 
 export interface Exercise {
-  id: number;
-  workout_id: number;
+  id: string;
+  workout_id: string;
   name: string;
   order: number;
   // Target from the preset this workout was started from; absent for ad-hoc exercises.
@@ -32,7 +32,7 @@ export interface RestState {
 }
 
 export interface Workout {
-  id: number;
+  id: string;
   date: string;
   // Preset name when started from a saved session.
   name?: string | null;
@@ -42,6 +42,8 @@ export interface Workout {
   started_at?: string | null;
   finished_at?: string | null;
   rest?: RestState | null;
+  // Local edit time (epoch ms); the newer edit wins when devices sync.
+  updated_at: number;
   exercises: Exercise[];
 }
 
@@ -50,7 +52,8 @@ export interface PresetExercise extends ExercisePlan {
 }
 
 export interface Preset {
-  id: number;
+  id: string;
   name: string;
   exercises: PresetExercise[];
+  updated_at: number;
 }
