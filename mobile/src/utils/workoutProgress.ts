@@ -35,7 +35,7 @@ export function describeTarget(exercise: Exercise, setNumber: number, weight: nu
 }
 
 // What comes next once one more set of `exerciseId` has been logged (null if the workout is over).
-export function describeNextAfterSet(workout: Workout, exerciseId: number): string | null {
+export function describeNextAfterSet(workout: Workout, exerciseId: string): string | null {
   const simulated: Workout = {
     ...workout,
     exercises: workout.exercises.map((e) =>

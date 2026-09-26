@@ -2,50 +2,53 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
   type PropsWithChildren,
 } from "react";
 
-import { loadJson, saveJson } from "../storage/storage";
+import { migrateWorkouts } from "../storage/legacy";
+import { loadJson } from "../storage/storage";
+import {
+  deleteLocal,
+  emptyState,
+  nextStamp,
+  upsertLocal,
+  type CollectionState,
+} from "../sync/collection";
+import { useSyncedCollection } from "../sync/useSyncedCollection";
 import type { Exercise, ExercisePlan, Preset, RestState, Set, Workout } from "../types";
+import { newId } from "../utils/id";
 
-const WORKOUTS_KEY = "gymlock_workouts_v1";
-
-interface StoredWorkouts {
-  nextId: number;
-  workouts: Workout[];
-}
+const WORKOUTS_KEY = "gymlock_workouts_v2";
+const LEGACY_WORKOUTS_KEY = "gymlock_workouts_v1";
 
 interface WorkoutsContextValue {
   workouts: Workout[];
   isLoading: boolean;
   // The workout that is being set up or is in progress, if any.
   openWorkout: Workout | undefined;
-  getWorkout: (id: number) => Workout | undefined;
+  getWorkout: (id: string) => Workout | undefined;
   getSetsForExercise: (name: string) => Set[];
   createWorkout: () => Promise<Workout>;
   createWorkoutFromPreset: (preset: Preset) => Promise<Workout>;
-  addExercise: (workoutId: number, name: string, plan: ExercisePlan) => Promise<Exercise>;
+  addExercise: (workoutId: string, name: string, plan: ExercisePlan) => Promise<Exercise>;
   updateExercise: (
-    workoutId: number,
-    exerciseId: number,
+    workoutId: string,
+    exerciseId: string,
     patch: { name?: string; plan?: ExercisePlan }
   ) => Promise<void>;
-  removeExercise: (workoutId: number, exerciseId: number) => Promise<void>;
-  deleteWorkout: (workoutId: number) => Promise<void>;
-  beginWorkout: (workoutId: number) => Promise<void>;
+  removeExercise: (workoutId: string, exerciseId: string) => Promise<void>;
+  deleteWorkout: (workoutId: string) => Promise<void>;
+  beginWorkout: (workoutId: string) => Promise<void>;
   completeSet: (
-    workoutId: number,
-    exerciseId: number,
+    workoutId: string,
+    exerciseId: string,
     weight: number,
     reps: number,
     restSeconds: number
   ) => Promise<{ finished: boolean }>;
-  setRest: (workoutId: number, rest: RestState | null) => Promise<void>;
-  finishWorkout: (workoutId: number) => Promise<void>;
+  setRest: (workoutId: string, rest: RestState | null) => Promise<void>;
+  finishWorkout: (workoutId: string) => Promise<void>;
 }
 
 const WorkoutsContext = createContext<WorkoutsContextValue | null>(null);
@@ -59,50 +62,57 @@ function todayLocalIso(): string {
 
 const isOpen = (w: Workout) => w.status === "planned" || w.status === "active";
 
+async function loadWorkouts(): Promise<CollectionState<Workout>> {
+  const stored = await loadJson<CollectionState<Workout>>(WORKOUTS_KEY);
+  if (stored) return stored;
+  const legacy = await loadJson<Parameters<typeof migrateWorkouts>[0]>(LEGACY_WORKOUTS_KEY);
+  return legacy ? migrateWorkouts(legacy) : emptyState<Workout>();
+}
+
 export function WorkoutsProvider({ children }: PropsWithChildren) {
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  // The ref is the source of truth so back-to-back actions never read stale state.
-  const workoutsRef = useRef<Workout[]>([]);
-  const nextIdRef = useRef(1);
+  const { items: workouts, isLoading, ref, update } = useSyncedCollection<Workout>({
+    name: "workouts",
+    storageKey: WORKOUTS_KEY,
+    load: loadWorkouts,
+    fresh: () => emptyState<Workout>(),
+  });
 
-  useEffect(() => {
-    loadJson<StoredWorkouts>(WORKOUTS_KEY).then((stored) => {
-      if (stored) {
-        workoutsRef.current = stored.workouts;
-        nextIdRef.current = stored.nextId;
-        setWorkouts(stored.workouts);
-      }
-      setIsLoading(false);
-    });
-  }, []);
-
-  const commit = useCallback((next: Workout[]) => {
-    workoutsRef.current = next;
-    setWorkouts(next);
-    saveJson(WORKOUTS_KEY, { nextId: nextIdRef.current, workouts: next } satisfies StoredWorkouts);
-  }, []);
-
-  const patchWorkout = useCallback(
-    (workoutId: number, fn: (w: Workout) => Workout) =>
-      commit(workoutsRef.current.map((w) => (w.id === workoutId ? fn(w) : w))),
-    [commit]
+  // Apply an edit to one workout and stamp it so it wins over older copies on other devices.
+  const mutate = useCallback(
+    (workoutId: string, edit: (w: Workout) => Workout) => {
+      const current = ref.current.items.find((w) => w.id === workoutId);
+      if (!current) return undefined;
+      const next = { ...edit(current), updated_at: nextStamp(current.updated_at) };
+      update(upsertLocal(ref.current, next));
+      return next;
+    },
+    [ref, update]
   );
 
   // Only one workout can be open at a time: unfinished drafts are dropped and any workout still
   // in progress is closed out, keeping what was logged so progress charts stay accurate.
-  const closeOpenWorkouts = useCallback((list: Workout[]): Workout[] => {
-    const finishedAt = new Date().toISOString();
-    return list
-      .filter((w) => !(w.status === "planned"))
-      .map((w) =>
-        w.status === "active" ? { ...w, status: "done" as const, finished_at: finishedAt, rest: null } : w
-      );
-  }, []);
-
-  const getWorkout = useCallback((id: number) => workouts.find((w) => w.id === id), [workouts]);
+  const closeOpenWorkouts = useCallback(
+    (state: CollectionState<Workout>): CollectionState<Workout> => {
+      let next = state;
+      for (const w of state.items) {
+        if (w.status === "planned") next = deleteLocal(next, w.id);
+        else if (w.status === "active") {
+          next = upsertLocal(next, {
+            ...w,
+            status: "done",
+            finished_at: new Date().toISOString(),
+            rest: null,
+            updated_at: nextStamp(w.updated_at),
+          });
+        }
+      }
+      return next;
+    },
+    []
+  );
 
   const openWorkout = useMemo(() => workouts.find(isOpen), [workouts]);
+  const getWorkout = useCallback((id: string) => workouts.find((w) => w.id === id), [workouts]);
 
   const getSetsForExercise = useCallback(
     (name: string) => {
@@ -113,16 +123,14 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
           if (exercise.name.trim().toLowerCase() === wanted) sets.push(...exercise.sets);
         }
       }
-      return sets.sort(
-        (a, b) => new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime()
-      );
+      return sets.sort((a, b) => Date.parse(a.completed_at) - Date.parse(b.completed_at));
     },
     [workouts]
   );
 
   const createWorkout = useCallback(async () => {
     const workout: Workout = {
-      id: nextIdRef.current++,
+      id: newId(),
       date: todayLocalIso(),
       name: null,
       notes: null,
@@ -130,15 +138,16 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
       started_at: null,
       finished_at: null,
       rest: null,
+      updated_at: Date.now(),
       exercises: [],
     };
-    commit([workout, ...closeOpenWorkouts(workoutsRef.current)]);
+    update(upsertLocal(closeOpenWorkouts(ref.current), workout));
     return workout;
-  }, [commit, closeOpenWorkouts]);
+  }, [closeOpenWorkouts, ref, update]);
 
   const createWorkoutFromPreset = useCallback(
     async (preset: Preset) => {
-      const id = nextIdRef.current++;
+      const id = newId();
       const workout: Workout = {
         id,
         date: todayLocalIso(),
@@ -148,8 +157,9 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
         started_at: null,
         finished_at: null,
         rest: null,
+        updated_at: Date.now(),
         exercises: preset.exercises.map((e, order) => ({
-          id: nextIdRef.current++,
+          id: newId(),
           workout_id: id,
           name: e.name,
           order,
@@ -157,81 +167,80 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
           sets: [],
         })),
       };
-      commit([workout, ...closeOpenWorkouts(workoutsRef.current)]);
+      update(upsertLocal(closeOpenWorkouts(ref.current), workout));
       return workout;
     },
-    [commit, closeOpenWorkouts]
+    [closeOpenWorkouts, ref, update]
   );
 
   const addExercise = useCallback(
-    async (workoutId: number, name: string, plan: ExercisePlan) => {
-      const workout = workoutsRef.current.find((w) => w.id === workoutId);
-      if (!workout) throw new Error("Workout not found");
+    async (workoutId: string, name: string, plan: ExercisePlan) => {
       const exercise: Exercise = {
-        id: nextIdRef.current++,
+        id: newId(),
         workout_id: workoutId,
         name,
-        order: workout.exercises.length,
+        order: 0,
         plan,
         sets: [],
       };
-      patchWorkout(workoutId, (w) => ({ ...w, exercises: [...w.exercises, exercise] }));
-      return exercise;
+      const result = mutate(workoutId, (w) => ({
+        ...w,
+        exercises: [...w.exercises, { ...exercise, order: w.exercises.length }],
+      }));
+      if (!result) throw new Error("Workout not found");
+      return result.exercises[result.exercises.length - 1];
     },
-    [patchWorkout]
+    [mutate]
   );
 
   const updateExercise = useCallback(
-    async (workoutId: number, exerciseId: number, patch: { name?: string; plan?: ExercisePlan }) => {
-      patchWorkout(workoutId, (w) => ({
+    async (workoutId: string, exerciseId: string, patch: { name?: string; plan?: ExercisePlan }) => {
+      mutate(workoutId, (w) => ({
         ...w,
         exercises: w.exercises.map((e) => (e.id === exerciseId ? { ...e, ...patch } : e)),
       }));
     },
-    [patchWorkout]
+    [mutate]
   );
 
   const removeExercise = useCallback(
-    async (workoutId: number, exerciseId: number) => {
-      patchWorkout(workoutId, (w) => ({
+    async (workoutId: string, exerciseId: string) => {
+      mutate(workoutId, (w) => ({
         ...w,
-        exercises: w.exercises
-          .filter((e) => e.id !== exerciseId)
-          .map((e, order) => ({ ...e, order })),
+        exercises: w.exercises.filter((e) => e.id !== exerciseId).map((e, order) => ({ ...e, order })),
       }));
     },
-    [patchWorkout]
+    [mutate]
   );
 
   const deleteWorkout = useCallback(
-    async (workoutId: number) => {
-      commit(workoutsRef.current.filter((w) => w.id !== workoutId));
+    async (workoutId: string) => {
+      update(deleteLocal(ref.current, workoutId));
     },
-    [commit]
+    [ref, update]
   );
 
   const beginWorkout = useCallback(
-    async (workoutId: number) => {
-      patchWorkout(workoutId, (w) => ({
+    async (workoutId: string) => {
+      mutate(workoutId, (w) => ({
         ...w,
         status: "active",
         started_at: new Date().toISOString(),
         rest: null,
       }));
     },
-    [patchWorkout]
+    [mutate]
   );
 
   // Logs the set and, only because the user pressed "Set done", starts the rest that follows it.
   const completeSet = useCallback(
-    async (workoutId: number, exerciseId: number, weight: number, reps: number, restSeconds: number) => {
-      const workout = workoutsRef.current.find((w) => w.id === workoutId);
-      if (!workout) throw new Error("Workout not found");
-      const exercise = workout.exercises.find((e) => e.id === exerciseId);
-      if (!exercise) throw new Error("Exercise not found");
+    async (workoutId: string, exerciseId: string, weight: number, reps: number, restSeconds: number) => {
+      const workout = ref.current.items.find((w) => w.id === workoutId);
+      const exercise = workout?.exercises.find((e) => e.id === exerciseId);
+      if (!workout || !exercise) throw new Error("Workout not found");
 
       const newSet: Set = {
-        id: nextIdRef.current++,
+        id: newId(),
         exercise_id: exerciseId,
         weight,
         reps,
@@ -243,7 +252,7 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
       );
       const finished = exercises.every((e) => !e.plan || e.sets.length >= e.plan.sets);
 
-      patchWorkout(workoutId, (w) => ({
+      mutate(workoutId, (w) => ({
         ...w,
         exercises,
         ...(finished
@@ -252,26 +261,26 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
       }));
       return { finished };
     },
-    [patchWorkout]
+    [mutate, ref]
   );
 
   const setRest = useCallback(
-    async (workoutId: number, rest: RestState | null) => {
-      patchWorkout(workoutId, (w) => ({ ...w, rest }));
+    async (workoutId: string, rest: RestState | null) => {
+      mutate(workoutId, (w) => ({ ...w, rest }));
     },
-    [patchWorkout]
+    [mutate]
   );
 
   const finishWorkout = useCallback(
-    async (workoutId: number) => {
-      patchWorkout(workoutId, (w) => ({
+    async (workoutId: string) => {
+      mutate(workoutId, (w) => ({
         ...w,
         status: "done",
         finished_at: new Date().toISOString(),
         rest: null,
       }));
     },
-    [patchWorkout]
+    [mutate]
   );
 
   const value = useMemo<WorkoutsContextValue>(

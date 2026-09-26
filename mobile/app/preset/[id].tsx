@@ -28,7 +28,7 @@ interface DraftExercise {
 export default function PresetEditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === "new";
-  const presetId = isNew ? undefined : Number(id);
+  const presetId = isNew ? undefined : id;
   const router = useRouter();
   const { getPreset, isLoading, savePreset, deletePreset } = usePresets();
   const existing = presetId !== undefined ? getPreset(presetId) : undefined;

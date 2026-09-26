@@ -62,7 +62,7 @@ export default function StartScreen() {
   const { createWorkout, createWorkoutFromPreset } = useWorkouts();
   const [busy, setBusy] = useState(false);
 
-  const open = async (start: () => Promise<{ id: number }>) => {
+  const open = async (start: () => Promise<{ id: string }>) => {
     if (busy) return;
     setBusy(true);
     try {

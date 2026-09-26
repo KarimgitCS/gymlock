@@ -1,7 +1,7 @@
 import type { Set as LoggedSet } from "../types";
 
 export interface SessionPoint {
-  exerciseId: number;
+  exerciseId: string;
   date: Date;
   maxWeight: number;
   volume: number;
@@ -12,7 +12,7 @@ export interface SessionPoint {
  * exercise_id recovers one point per workout session for a given exercise name.
  */
 export function groupSetsBySession(sets: LoggedSet[]): SessionPoint[] {
-  const byExercise = new Map<number, LoggedSet[]>();
+  const byExercise = new Map<string, LoggedSet[]>();
   for (const s of sets) {
     const list = byExercise.get(s.exercise_id) ?? [];
     list.push(s);

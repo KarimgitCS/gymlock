@@ -12,7 +12,7 @@ export default function WorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { getWorkout, isLoading } = useWorkouts();
-  const workout = getWorkout(Number(id));
+  const workout = getWorkout(id);
 
   if (!workout) {
     return (
