@@ -11,6 +11,8 @@ A workout tracker for the web and mobile: plan a session, then lift one set at a
 - **Rest timer that never starts by itself:** it starts only when you press **Set done**, and when it ends it waits for you. It is stored as an absolute end time, so it stays accurate through backgrounding and page reloads.
 - **An alarm you can't miss:** when a rest ends with the app open, an alarm keeps sounding and pulsing until you tap Set done, Skip or Stop alarm (or a minute passes). In the phone app the sound is a looping beep that plays even with the silent switch on, with strong haptic pulses. With the app closed or the phone locked, the phone app schedules a burst of notifications (one when the rest ends, then a reminder every 8 seconds for about a minute) that stops when you open the app. In a browser, the alarm is the same looping beep and vibration while the page is open, and the site keeps the screen awake during a workout. Settings has **Test notification** and **Test alarm** buttons to check this on your own device.
 - **Dropdowns instead of typing:** sets 1–8, reps 1–16, weight 5–300 lb in 5 lb steps, rest 15–300 s.
+- **Workout log:** the History tab lists every finished workout newest first, with its date and time, sets, volume and duration. Workouts that were ended early are marked with how many planned sets were done. Tap one to review it.
+- **Delete workouts you don't want:** delete any logged workout (two taps to confirm) from the log or from its summary, and it disappears from the progress charts and from your other devices. Only finished workouts count toward progress, so a session still in progress does not either.
 - **Progress charts:** max weight and volume over time for every exercise, drawn with hand-built SVG (no charting library).
 - **Local-first with optional sync:** everything is saved on the device first, so the app is instant and works offline. Sign in (JWT) and the same data syncs through the FastAPI backend to your other devices and is backed up in Postgres. Without an account nothing leaves the device.
 
@@ -94,8 +96,8 @@ cd mobile && npm run e2e                # browser tests, see mobile/e2e/README.m
 ```
 
 - **Backend:** the tests run the real Alembic migrations against a throwaway `gymlock_test` database (created automatically; override with `TEST_DATABASE_URL`). They cover auth (hashing, expiry, forged and deleted-user tokens), the sync endpoint, last-write-wins conflicts, deletes, per-user isolation, validation, and token refresh.
-- **Client unit tests** cover the merge logic on its own: newer edit wins, deletes versus edits, idempotency, two devices converging, and migration of older local data.
-- **Browser tests** drive the built web app in Chromium: the whole guest workout flow, presets, and a two-device sync scenario (sign-up upload, sign-in download, propagation, deletes, conflict, offline queueing, sign-out isolation, expired session).
+- **Client unit tests** cover the merge logic on its own: newer edit wins, deletes versus edits, idempotency, two devices converging, and migration of older local data. They also cover the workout log (which workouts are listed, ordering, "ended early").
+- **Browser tests** drive the built web app in Chromium: the whole guest workout flow, presets, the workout log and deleting workouts (including that deleted or unfinished workouts stay off the progress chart), and a two-device sync scenario (sign-up upload, sign-in download, propagation, deletes, conflict, offline queueing, sign-out isolation, expired session).
 - **CI** (GitHub Actions) runs the backend tests against a Postgres service, and the type check and unit tests for the client.
 
 ## Data model (API database)
@@ -117,7 +119,7 @@ Every synced row also carries `updated_at` (the client's edit time, epoch ms), `
 - `GET /auth/me` — the signed-in user
 - `POST /sync` — push local changes and pull everything that changed on the server (see below)
 - `GET /workouts`, `GET /presets` — read the account's data
-- `GET /exercises/history?name=Bench%20Press` — sets for an exercise name across all workouts
+- `GET /exercises/history?name=Bench%20Press` — sets for an exercise name across finished, non-deleted workouts
 - `GET /health` — liveness check
 
 Every route except signup, login and health requires an `Authorization: Bearer` header carrying the JWT.
@@ -147,7 +149,7 @@ Details worth knowing:
 - **Workout screen** (`app/workout/[id].tsx`): a workout moves through three stages. **Planned** (`src/workout/WorkoutSetup.tsx`) edits every exercise's plan and the rest time while nothing runs. **Active** (`ActiveWorkout.tsx`) shows one set at a time with a Set done button, then the rest countdown with +30 s and Skip rest. **Done** (`WorkoutSummary.tsx`) shows the totals. Home shows a Resume card while a workout is planned or active.
 - **Rest timer:** `src/hooks/useRestTimer.ts` counts down to a stored end timestamp and re-syncs with `AppState` when the app returns to the foreground; `src/timers/restAlerts.ts` schedules the repeating end-of-rest notifications in the phone app (`expo-notifications`; timing rules in `src/timers/schedule.ts`) and, on the web, plays a generated beep through an `<audio>` element and vibrates where supported. `src/timers/restAlarm.ts` is the alarm that runs while the app is open (`expo-audio` with `playsInSilentMode`, `expo-haptics`; the loop sound is `assets/rest-over.wav`, regenerated by `scripts/generate-alarm-sound.ts`). `expo-keep-awake` keeps the screen on during a workout.
 - **Account:** `app/account.tsx` (sign in or create an account), the sync badge in the header, and the account card in Settings.
-- **Pickers and charts:** `src/components/NumberPicker.tsx` is the scrolling dropdown (ranges in `src/constants.ts`); `app/(tabs)/progress.tsx` and `src/components/LineChart.tsx` draw the charts.
+- **Pickers and charts:** `src/components/NumberPicker.tsx` is the scrolling dropdown (ranges in `src/constants.ts`); `app/(tabs)/progress.tsx` and `src/components/LineChart.tsx` draw the charts. The workout log is `app/(tabs)/history.tsx`, with its rules (finished workouts only, newest first, ended early) in `src/utils/history.ts`.
 
 ## Deployment
 
