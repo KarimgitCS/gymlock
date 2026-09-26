@@ -26,7 +26,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-audio"
     ],
     "backgroundColor": "#0d0a1f",
     "splash": {
