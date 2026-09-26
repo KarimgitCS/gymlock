@@ -125,7 +125,7 @@ await step("the screen lock is released when the workout ends", async () => {
   await tid("end-workout").click();
   await page.getByText("Tap again to end the workout").waitFor();
   await tid("end-workout").click();
-  await page.getByText("Workout complete").waitFor();
+  await page.getByText("Workout ended early").waitFor();
   await page.waitForTimeout(300);
   if ((await spy()).wake.released <= releasedBefore) throw new Error("wake lock never released");
 });

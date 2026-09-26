@@ -37,7 +37,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "e2e": "node e2e/guest-flow.mjs && node e2e/presets.mjs && node e2e/alerts.mjs && node e2e/sync.mjs"
+    "e2e": "node e2e/guest-flow.mjs && node e2e/history.mjs && node e2e/presets.mjs && node e2e/alerts.mjs && node e2e/sync.mjs"
   },
   "private": true
 }

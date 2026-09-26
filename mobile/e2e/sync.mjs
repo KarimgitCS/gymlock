@@ -139,6 +139,30 @@ await step("deleting a preset on A removes it from B", async () => {
   await B.getByText("Sync now").click(); await synced(B);
   eq((await presetNames(B)).includes("Arm Day"), false, "B no longer has Arm Day");
 });
+await step("a workout deleted on A leaves B's log and the server, and the other workout stays on the chart", async () => {
+  const logCount = async (p) => { await p.goto(SITE + "/history"); await p.waitForTimeout(600); return p.locator('[data-testid^="history-item-"]').count(); };
+  await finishWorkout(A, "Leg Day");
+  await A.goto(SITE + "/settings"); await synced(A);
+  await B.goto(SITE + "/settings");
+  await B.getByText("Sync now").click(); await synced(B);
+  eq(await logCount(B), 2, "B's log after A logged a second workout");
+  eq((await apiGet("/workouts", token)).length, 2, "server workouts before the delete");
+
+  await A.goto(SITE + "/history");
+  const doomed = A.locator('[data-testid^="history-item-"]', { hasText: "Leg Day" }).first();
+  await doomed.locator('[data-testid^="history-delete-"]').click();
+  await doomed.getByText("Tap again to delete").waitFor();
+  await doomed.locator('[data-testid^="history-delete-"]').click();
+  await A.waitForFunction(() => document.querySelectorAll('[data-testid^="history-item-"]').length === 1);
+  await A.goto(SITE + "/settings"); await synced(A);
+  await B.goto(SITE + "/settings");
+  await B.getByText("Sync now").click(); await synced(B);
+  eq(await logCount(B), 1, "B's log after A deleted it");
+  eq((await apiGet("/workouts", token)).map((w) => w.name), ["Push Day"], "server workouts after the delete");
+  await B.goto(SITE + "/progress");
+  await B.getByText("Bench Press", { exact: true }).last().click();
+  await B.getByText(/Latest: 135 lb/).waitFor({ timeout: 20000 });
+});
 // In-app helpers: while a device is offline the browser cannot load a new URL, so these only
 // use the app's own navigation, starting from the /start screen.
 const renameInApp = async (p, from, to) => {

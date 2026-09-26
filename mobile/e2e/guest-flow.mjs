@@ -131,7 +131,7 @@ await step("End workout early (two-step) keeps what was logged", async () => {
   await tid("end-workout").click();
   await page.getByText("Tap again to end the workout").waitFor();
   await tid("end-workout").click();
-  await page.getByText("Workout complete").waitFor();
+  await page.getByText("Workout ended early").waitFor();
   await page.getByText("155 lb × 8").waitFor();
 });
 console.log("network calls to the API:", apiCalls.length ? apiCalls : "none");
