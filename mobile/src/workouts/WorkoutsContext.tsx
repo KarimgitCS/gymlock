@@ -17,6 +17,7 @@ import {
 } from "../sync/collection";
 import { useSyncedCollection } from "../sync/useSyncedCollection";
 import type { Exercise, ExercisePlan, Preset, RestState, Set, Workout } from "../types";
+import { isFinished } from "../utils/history";
 import { newId } from "../utils/id";
 
 const WORKOUTS_KEY = "gymlock_workouts_v2";
@@ -114,11 +115,13 @@ export function WorkoutsProvider({ children }: PropsWithChildren) {
   const openWorkout = useMemo(() => workouts.find(isOpen), [workouts]);
   const getWorkout = useCallback((id: string) => workouts.find((w) => w.id === id), [workouts]);
 
+  // Feeds the progress charts: only finished workouts count, so a session that is still being
+  // set up or is in progress does not, and deleting a workout removes it from the charts.
   const getSetsForExercise = useCallback(
     (name: string) => {
       const wanted = name.trim().toLowerCase();
       const sets: Set[] = [];
-      for (const workout of workouts) {
+      for (const workout of workouts.filter(isFinished)) {
         for (const exercise of workout.exercises) {
           if (exercise.name.trim().toLowerCase() === wanted) sets.push(...exercise.sets);
         }

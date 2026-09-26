@@ -3,10 +3,13 @@ import { useEffect } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
+import { DeleteWorkoutButton } from "../components/DeleteWorkoutButton";
 import { cancelRestAlert } from "../timers/restAlerts";
 import { accentFor, colors, radius, spacing } from "../theme";
 import type { Workout } from "../types";
+import { describeEntry, formatWorkoutWhen } from "../utils/history";
 import { workoutVolume } from "../utils/workoutProgress";
+import { useWorkouts } from "../workouts/WorkoutsContext";
 
 function duration(workout: Workout): string | null {
   if (!workout.started_at || !workout.finished_at) return null;
@@ -16,6 +19,8 @@ function duration(workout: Workout): string | null {
 
 export function WorkoutSummary({ workout }: { workout: Workout }) {
   const router = useRouter();
+  const { deleteWorkout } = useWorkouts();
+  const endedEarly = describeEntry(workout).endedEarly;
   const sets = workout.exercises.reduce((sum, e) => sum + e.sets.length, 0);
   const time = duration(workout);
 
@@ -27,8 +32,11 @@ export function WorkoutSummary({ workout }: { workout: Workout }) {
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <Text style={styles.emoji}>🎉</Text>
-        <Text style={styles.title}>Workout complete</Text>
+        <Text style={styles.title}>{endedEarly ? "Workout ended early" : "Workout complete"}</Text>
         <Text style={styles.subtitle}>{workout.name || "Workout"}</Text>
+        <Text style={styles.when} testID="summary-when">
+          {formatWorkoutWhen(workout)}
+        </Text>
       </View>
 
       <View style={styles.stats}>
@@ -67,6 +75,16 @@ export function WorkoutSummary({ workout }: { workout: Workout }) {
       ))}
 
       <Button title="Back to home" onPress={() => router.replace("/")} />
+      <Text style={styles.deleteHint}>
+        Not a workout you want to keep? Deleting it also removes it from your progress charts.
+      </Text>
+      <DeleteWorkoutButton
+        testID="delete-workout"
+        onDelete={async () => {
+          await deleteWorkout(workout.id);
+          router.replace("/history");
+        }}
+      />
     </ScrollView>
   );
 }
@@ -92,6 +110,16 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.textMuted,
     fontSize: 15,
+  },
+  when: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  deleteHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: "center",
   },
   stats: {
     flexDirection: "row",

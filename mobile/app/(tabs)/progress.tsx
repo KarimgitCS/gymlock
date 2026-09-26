@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { LineChart } from "../../src/components/LineChart";
 import { accentFor, colors, radius, spacing } from "../../src/theme";
+import { isFinished } from "../../src/utils/history";
 import { groupSetsBySession } from "../../src/utils/progress";
 import { useWorkouts } from "../../src/workouts/WorkoutsContext";
 
@@ -34,8 +35,9 @@ export default function ProgressScreen() {
 
   const exerciseNames = useMemo(() => {
     const names: string[] = [];
-    for (const workout of workouts) {
+    for (const workout of workouts.filter(isFinished)) {
       for (const exercise of workout.exercises) {
+        if (exercise.sets.length === 0) continue;
         if (!names.some((n) => n.toLowerCase() === exercise.name.toLowerCase())) {
           names.push(exercise.name);
         }
